@@ -293,9 +293,9 @@ ha-moviesdb/
 
 ## Mindestanforderungen
 
-- Home Assistant **2024.5.0** oder neuer (ältere Versionen funktionieren
-  auch, nur ohne die anpassbare Kartenbreite und das lokale
-  "Geräte & Dienste"-Icon)
+- Home Assistant **2024.12.0** oder neuer (der Options-Flow nutzt die
+  `config_entry`-Property, die Home Assistant Config-Flows seit dieser
+  Version selbst bereitstellt)
 
 ## Lizenz
 

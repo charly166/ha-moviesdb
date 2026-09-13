@@ -276,8 +276,9 @@ ha-moviesdb/
 
 ## Minimum Requirements
 
-- Home Assistant **2024.5.0** or newer (older versions work too, just
-  without the resizable card width and the local "Devices & Services" icon)
+- Home Assistant **2024.12.0** or newer (the options flow relies on the
+  `config_entry` property Home Assistant core provides to config flows
+  since that release)
 
 ## License
 

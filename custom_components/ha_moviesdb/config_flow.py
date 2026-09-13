@@ -67,7 +67,7 @@ class TMDBConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> "TMDBOptionsFlow":
-        return TMDBOptionsFlow(config_entry)
+        return TMDBOptionsFlow()
 
 
 class TMDBOptionsFlow(config_entries.OptionsFlow):
@@ -79,14 +79,14 @@ class TMDBOptionsFlow(config_entries.OptionsFlow):
     Formulars geladen). Ein erneutes Öffnen des Dialogs zeigt dann die
     Anbieter der neuen Region. Ein zweistufiger Wizard würde das vermeiden,
     ist für diesen Anwendungsfall aber unnötig komplex.
-    """
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        # Explizit statt auf die automatische `self.config_entry`-Injektion
-        # neuerer Home-Assistant-Kernversionen zu vertrauen, damit die
-        # Integration auch mit der in manifest.json genannten
-        # Mindestversion (2024.5.0) zuverlässig funktioniert.
-        self.config_entry = config_entry
+    `self.config_entry` wird nicht mehr selbst gesetzt, sondern von Home
+    Assistant automatisch bereitgestellt (seit Core 2024.12). Die frühere
+    manuelle Zuweisung im `__init__` war ein bewusster Kompromiss für ältere
+    Kernversionen, führt seit Core 2025.12 aber zu einer `AttributeError`
+    (Property ohne Setter) und damit zu einem 500er beim Öffnen der
+    Konfiguration.
+    """
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         errors: dict[str, str] = {}
