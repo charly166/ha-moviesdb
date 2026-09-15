@@ -15,7 +15,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import TMDBAuthError, TMDBClient, TMDBError
@@ -116,13 +116,21 @@ class TMDBOptionsFlow(config_entries.OptionsFlow):
             providers = []
             errors["base"] = "cannot_connect"
 
-        provider_choices = {
+        provider_names = {
             str(p["provider_id"]): p["provider_name"] for p in providers if p.get("provider_id")
         }
         # Bereits ausgewählte Anbieter immer anzeigen, auch falls sie aus der
         # gerade geladenen Liste herausgefallen sind (z.B. nach Regionswechsel).
         for provider_id in current_provider_ids:
-            provider_choices.setdefault(str(provider_id), str(provider_id))
+            provider_names.setdefault(str(provider_id), str(provider_id))
+
+        provider_options = sorted(
+            (
+                selector.SelectOptionDict(value=provider_id, label=name)
+                for provider_id, name in provider_names.items()
+            ),
+            key=lambda option: option["label"].casefold(),
+        )
 
         schema = vol.Schema(
             {
@@ -130,7 +138,13 @@ class TMDBOptionsFlow(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_PROVIDER_IDS,
                     default=[str(p) for p in current_provider_ids],
-                ): cv.multi_select(provider_choices),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=provider_options,
+                        multiple=True,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
             }
         )
 
