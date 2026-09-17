@@ -24,6 +24,12 @@ ads), based on TMDB's JustWatch-sourced watch-provider data.
 This is a sibling project to [HA SeriesDB](https://github.com/charly166/ha-seriesdb),
 built on the same architecture, but for movies instead of TV shows.
 
+## Screenshot
+
+<p align="center">
+  <img src="docs/screenshot.png" alt="HA MoviesDB Lovelace card showing the watchlist" width="500">
+</p>
+
 ## Features
 
 - Search themoviedb.org and add movies to your watchlist

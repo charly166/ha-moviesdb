@@ -26,6 +26,12 @@ Dieses Projekt ist ein Schwesterprojekt von
 [HA SeriesDB](https://github.com/charly166/ha-seriesdb) mit derselben
 Architektur, aber für Filme statt Serien.
 
+## Screenshot
+
+<p align="center">
+  <img src="docs/screenshot.png" alt="HA MoviesDB Lovelace-Karte mit Watchlist" width="500">
+</p>
+
 ## Features
 
 - Suche auf themoviedb.org und Hinzufügen von Filmen zur Watchlist
