@@ -51,6 +51,9 @@ Architektur, aber für Filme statt Serien.
   Ziehen anpassbar und füllen die zugewiesene Rasterzelle exakt aus
 - Eigenes Icon/Logo unter Einstellungen → Geräte & Dienste (Home Assistant
   2026.3+)
+- Kartenoberfläche auf **Deutsch und Englisch**, abhängig von der Sprache des
+  angemeldeten Home-Assistant-Benutzers (andere Sprachen fallen auf Englisch
+  zurück)
 - Eine Sensor-Entität pro verfolgtem Film (Status + `available_on`-Liste der
   eigenen Anbieter, die den Film gerade im Abo haben) für Automationen, z.B.
   "benachrichtige mich, wenn ein Film auf Netflix verfügbar wird"
@@ -171,7 +174,7 @@ Ressourcenliste zu schreiben. In diesem Fall folgendes manuell in die
 `ui-lovelace.yaml` eintragen:
 ```yaml
 resources:
-  - url: /ha_moviesdb/ha-moviesdb-card.js?v=1
+  - url: /ha_moviesdb/ha-moviesdb-card.js?v=2
     type: module
 ```
 In diesem Fall musst du die `?v=...`-Nummer nach jedem zukünftigen Update
@@ -253,6 +256,14 @@ automation:
   aufgefrischt (alle 12 Stunden für Filme auf der Watchlist, archivierte
   Filme werden übersprungen) und lässt sich zusätzlich gezielt beim Öffnen
   der Detailansicht aktualisieren.
+- **Sprachen:** Die Kartenoberfläche gibt es auf Deutsch und Englisch; sie
+  folgt der Sprache des angemeldeten Home-Assistant-Benutzers (alle anderen
+  Sprachen fallen auf Englisch zurück). Weitere Sprachen lassen sich ohne
+  Codeänderung ergänzen: eine Datei `<sprache>.json` (z.B. `fr.json`) unter
+  `custom_components/ha_moviesdb/www/translations/` ablegen, mit den Schlüsseln
+  aus dem `en`-Block am Anfang von `ha-moviesdb-card.js` – fehlende Schlüssel fallen auf
+  Englisch zurück. Pull Requests mit neuen Sprachen sind willkommen. Titel und
+  Beschreibungen selbst liefert TMDB auf Deutsch (siehe unten).
 - Texte/Beschreibungen sind standardmäßig **Deutsch** (`language=de-DE`),
   passend zum Ursprung dieses Projekts. Die Konstante `TMDB_LANGUAGE` in
   `const.py` kann bei Bedarf angepasst werden (z.B. auf `en-US`).

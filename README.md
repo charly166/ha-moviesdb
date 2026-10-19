@@ -47,6 +47,8 @@ built on the same architecture, but for movies instead of TV shows.
 - Card width **and height** are resizable by dragging in modern "Sections"
   dashboards, filling exactly the assigned grid cell
 - Own icon/logo under Settings → Devices & Services (Home Assistant 2026.3+)
+- Card UI in **English and German**, following the language of the logged-in
+  Home Assistant user (other languages fall back to English)
 - A sensor entity per tracked movie (status + `available_on` list of your own
   providers currently streaming it) for use in automations, e.g. "notify me
   when a movie becomes available on Netflix"
@@ -160,7 +162,7 @@ Home Assistant not allow integrations to write to the resource list at all.
 In that case, add this to your `ui-lovelace.yaml` manually:
 ```yaml
 resources:
-  - url: /ha_moviesdb/ha-moviesdb-card.js?v=1
+  - url: /ha_moviesdb/ha-moviesdb-card.js?v=2
     type: module
 ```
 You'll need to bump the `?v=...` number yourself after each future update in
@@ -237,6 +239,14 @@ automation:
   streaming availability, so only that is refreshed periodically (every 12
   hours for watchlist movies; archived movies are skipped) and can also be
   refreshed on demand when opening a movie's detail view.
+- **Languages:** The card UI is available in English and German and follows
+  the language of the logged-in Home Assistant user (all other languages fall
+  back to English). Further languages can be added without touching any code:
+  put a `<lang>.json` file (e.g. `fr.json`) into
+  `custom_components/ha_moviesdb/www/translations/`, using the keys from the `en`
+  block at the top of `ha-moviesdb-card.js` – missing keys fall back to English. Pull
+  requests with new languages are welcome. Movie/show titles and descriptions
+  themselves come from TMDB in German (see below).
 - Text/descriptions default to **German** (`language=de-DE`), matching this
   project's origin. Change the `TMDB_LANGUAGE` constant in `const.py` (e.g.
   to `en-US`) if you'd prefer another language.
