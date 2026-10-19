@@ -245,11 +245,15 @@ automation:
   put a `<lang>.json` file (e.g. `fr.json`) into
   `custom_components/ha_moviesdb/www/translations/`, using the keys from the `en`
   block at the top of `ha-moviesdb-card.js` – missing keys fall back to English. Pull
-  requests with new languages are welcome. Movie/show titles and descriptions
-  themselves come from TMDB in German (see below).
-- Text/descriptions default to **German** (`language=de-DE`), matching this
-  project's origin. Change the `TMDB_LANGUAGE` constant in `const.py` (e.g.
-  to `en-US`) if you'd prefer another language.
+  requests with new languages are welcome. Titles and descriptions are
+  requested from TMDB in the Home Assistant language (see below).
+- Titles, descriptions and posters are requested from TMDB in the language
+  configured in Home Assistant (e.g. `de` -> `de-DE`, `en` -> `en-US`; falls
+  back to German if none is set). This is an instance-wide setting, unlike
+  the card UI which follows each user's own language. If you change the
+  Home Assistant language, already tracked movies are re-fetched once in the
+  new language after the next restart/reload. TMDB may return an empty field
+  if no translation exists for a title in your language.
 - `iot_class: cloud_polling` – the integration actively polls
   themoviedb.org, by default every 12 hours for watchlist movies, plus on
   every manual search/add/refresh action.

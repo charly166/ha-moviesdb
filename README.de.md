@@ -263,10 +263,16 @@ automation:
   `custom_components/ha_moviesdb/www/translations/` ablegen, mit den Schlüsseln
   aus dem `en`-Block am Anfang von `ha-moviesdb-card.js` – fehlende Schlüssel fallen auf
   Englisch zurück. Pull Requests mit neuen Sprachen sind willkommen. Titel und
-  Beschreibungen selbst liefert TMDB auf Deutsch (siehe unten).
-- Texte/Beschreibungen sind standardmäßig **Deutsch** (`language=de-DE`),
-  passend zum Ursprung dieses Projekts. Die Konstante `TMDB_LANGUAGE` in
-  `const.py` kann bei Bedarf angepasst werden (z.B. auf `en-US`).
+  Beschreibungen werden von TMDB in der Home-Assistant-Sprache abgefragt (siehe
+  unten).
+- Titel, Beschreibungen und Poster werden von TMDB in der in Home Assistant
+  eingestellten Sprache abgefragt (z.B. `de` -> `de-DE`, `en` -> `en-US`;
+  Fallback ist Deutsch). Das ist eine Einstellung für die ganze Instanz – im
+  Gegensatz zur Kartenoberfläche, die der Sprache des jeweiligen Benutzers
+  folgt. Ändert man die Home-Assistant-Sprache, werden bereits verfolgte
+  Filme nach dem nächsten Neustart/Neuladen einmalig in der neuen Sprache
+  nachgeladen. Gibt es für einen Titel keine Übersetzung, liefert TMDB ggf.
+  ein leeres Feld.
 - `iot_class: cloud_polling` – die Integration fragt themoviedb.org aktiv
   ab, standardmäßig alle 12 Stunden für Filme auf der Watchlist, sowie bei
   jeder manuellen Such-/Hinzufüge-/Aktualisieren-Aktion.
