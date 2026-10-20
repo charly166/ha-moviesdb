@@ -74,14 +74,18 @@ of it:
    https://www.themoviedb.org/about/logos-attribution (SVG or PNG, e.g. the
    short square variant).
 2. Save it unmodified (don't change color/aspect ratio) as `tmdb-logo.svg`
-   (or `.png`, in which case adjust the filename once in
-   `custom_components/ha_moviesdb/www/ha-moviesdb-card.js`, method
-   `_renderTmdbAttribution()`) here:
+   (or `tmdb-logo.png`) in your Home Assistant `www` folder, inside a
+   `ha_moviesdb` subfolder (create it if needed; if the `www` folder did not
+   exist before, restart Home Assistant once):
    ```
-   custom_components/ha_moviesdb/www/tmdb-logo.svg
+   <config>/www/ha_moviesdb/tmdb-logo.svg
    ```
-3. Done – until that file exists, the card simply hides the logo
-   placeholder and keeps showing the required text.
+   This location is outside `custom_components`, so it survives HACS
+   updates. (Older installs that stored the file in
+   `custom_components/ha_moviesdb/www/` keep working, but HACS removes that
+   copy on every update – please move it.)
+3. Reload the browser – until the file exists, the card simply hides the
+   logo placeholder and keeps showing the required text.
 
 Watch-provider (streaming availability) data is sourced from **JustWatch**
 and delivered through TMDB's `/watch/providers` API, which has its own,
@@ -290,9 +294,11 @@ ha-moviesdb/
     ├── websocket_api.py       WebSocket commands used by the card
     └── www/
         ├── ha-moviesdb-card.js    Lovelace card (GUI)
-        ├── ha-moviesdb-icon.png   App icon for the card header
-        └── tmdb-logo.svg          ⚠️ you need to add this yourself, see above
+        └── ha-moviesdb-icon.png   App icon for the card header
 ```
+
+The TMDB logo is not part of this folder – you add it yourself under
+`<config>/www/ha_moviesdb/`, see "Legal" above.
 
 ## Minimum Requirements
 

@@ -1186,11 +1186,24 @@ class HaMoviesDbCard extends HTMLElement {
     // prominent als das eigene App-Logo im Header.
     const wrap = this._el("div", "tmdb-attribution");
     const logo = document.createElement("img");
-    logo.src = `/${DOMAIN}/tmdb-logo.svg`;
+    // /local/ = <config>/www/ liegt außerhalb von custom_components und
+    // übersteht HACS-Updates; der alte Ablageort bleibt als Fallback.
+    const sources = [
+      `/local/${DOMAIN}/tmdb-logo.svg`,
+      `/local/${DOMAIN}/tmdb-logo.png`,
+      `/${DOMAIN}/tmdb-logo.svg`,
+    ];
+    let sourceIndex = 0;
     logo.alt = "TMDB";
     logo.addEventListener("error", () => {
-      logo.style.display = "none";
+      sourceIndex += 1;
+      if (sourceIndex < sources.length) {
+        logo.src = sources[sourceIndex];
+      } else {
+        logo.style.display = "none";
+      }
     });
+    logo.src = sources[0];
     wrap.appendChild(logo);
 
     const text = document.createElement("span");
