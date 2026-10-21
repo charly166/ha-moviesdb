@@ -37,7 +37,7 @@ STATIC_BASE_PATH = f"/{DOMAIN}"
 # Lovelace-Ressource wird automatisch auf diese Version aktualisiert (siehe
 # frontend.py) - ein manuelles Nachtragen der URL ist dadurch nicht mehr
 # nötig.
-CARD_VERSION = "3"
+CARD_VERSION = "4"
 
 STORAGE_VERSION = 1
 STORAGE_KEY = f"{DOMAIN}_data"
@@ -45,11 +45,15 @@ STORAGE_KEY = f"{DOMAIN}_data"
 UPDATE_INTERVAL_HOURS = 12
 
 # "Im Kino"-Tab: TMDB liefert /movie/now_playing seitenweise (20 Filme pro
-# Seite). Mehr als ein paar Seiten bringen für die Anzeige nichts, die
-# Antwort wird zwischengespeichert, damit nicht bei jedem Tab-Wechsel ein
-# neuer Abruf nötig ist.
-NOW_PLAYING_MAX_PAGES = 3
+# Seite) und zählt auch Wiederaufführungen und Sondervorstellungen alter
+# Filme mit. Damit aktuelle Filme nicht hinter solchen Einträgen abgeschnitten
+# werden, werden viele Seiten geholt und danach nach dem ursprünglichen
+# Erscheinungsdatum gefiltert (NOW_PLAYING_MAX_AGE_DAYS). Die Antwort wird
+# zwischengespeichert, damit nicht bei jedem Tab-Wechsel ein neuer Abruf nötig ist.
+NOW_PLAYING_MAX_PAGES = 10
+NOW_PLAYING_MAX_AGE_DAYS = 270
 NOW_PLAYING_CACHE_SECONDS = 6 * 60 * 60
+TRAILER_CACHE_SECONDS = 24 * 60 * 60
 
 SIGNAL_MOVIE_ADDED = f"{DOMAIN}_movie_added"
 SIGNAL_MOVIE_REMOVED = f"{DOMAIN}_movie_removed"

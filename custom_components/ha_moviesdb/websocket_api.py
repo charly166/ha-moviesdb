@@ -32,6 +32,7 @@ from .const import (
     NOW_PLAYING_CACHE_SECONDS,
     SIGNAL_MOVIE_ADDED,
     SIGNAL_MOVIE_REMOVED,
+    TRAILER_CACHE_SECONDS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -118,6 +119,32 @@ async def ws_now_playing(hass: HomeAssistant, connection: websocket_api.ActiveCo
             "results": [{**item, "tracked": item["movie_id"] in tracked_ids} for item in results],
         },
     )
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/get_trailer", vol.Required("movie_id"): str}
+)
+@websocket_api.async_response
+async def ws_get_trailer(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Liefert einen YouTube-Link zum Trailer eines Films, falls TMDB einen kennt."""
+    entry_data = _get_entry_data(hass)
+    if entry_data is None:
+        connection.send_error(msg["id"], "not_configured", "Integration ist nicht eingerichtet.")
+        return
+    client = entry_data["client"]
+    cache = entry_data.setdefault("trailer_cache", {})
+    cache_key = (msg["movie_id"], client.language)
+    cached = cache.get(cache_key)
+    if cached is not None and time.monotonic() - cached[0] < TRAILER_CACHE_SECONDS:
+        trailer = cached[1]
+    else:
+        try:
+            trailer = await client.async_get_trailer(msg["movie_id"])
+        except TMDBError as err:
+            connection.send_error(msg["id"], "tmdb_error", str(err))
+            return
+        cache[cache_key] = (time.monotonic(), trailer)
+    connection.send_result(msg["id"], {"trailer": trailer})
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/list_tracked"})
@@ -309,6 +336,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
     """Registriert alle WebSocket-Befehle (nur einmal global nötig)."""
     websocket_api.async_register_command(hass, ws_search)
     websocket_api.async_register_command(hass, ws_now_playing)
+    websocket_api.async_register_command(hass, ws_get_trailer)
     websocket_api.async_register_command(hass, ws_list_tracked)
     websocket_api.async_register_command(hass, ws_get_movie)
     websocket_api.async_register_command(hass, ws_get_watch_providers)

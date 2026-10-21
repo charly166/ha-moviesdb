@@ -38,6 +38,9 @@ const TRANSLATIONS = {
     loading_nowplaying: "Lade Kinofilme …",
     empty_nowplaying: "Aktuell wurden keine Kinofilme gefunden.",
     err_nowplaying: "Kinofilme konnten nicht geladen werden.",
+    trailer_link: "▶ Trailer auf YouTube ansehen",
+    loading_trailer: "Suche Trailer …",
+    no_overview: "Keine Beschreibung verfügbar.",
     empty_watchlist: "Noch keine Filme in der Watchlist. Wechsle oben zu „Film hinzufügen“ oder „Im Kino“, um loszulegen.",
     empty_archive: "Noch keine archivierten Filme. Markiere einen Film in der Detailansicht als gesehen, um ihn ins Archiv zu verschieben.",
     available: "Verfügbar: {list}",
@@ -92,6 +95,9 @@ const TRANSLATIONS = {
     loading_nowplaying: "Loading movies in theaters …",
     empty_nowplaying: "No movies in theaters found right now.",
     err_nowplaying: "Could not load the movies in theaters.",
+    trailer_link: "▶ Watch trailer on YouTube",
+    loading_trailer: "Looking for a trailer …",
+    no_overview: "No description available.",
     empty_watchlist: "No movies on your watchlist yet. Switch to “Add movie” or “In theaters” above to get started.",
     empty_archive: "No archived movies yet. Mark a movie as watched in its detail view to move it to the archive.",
     available: "Available: {list}",
@@ -374,7 +380,9 @@ const STYLES = `
     border: 1px solid var(--tmdb-border);
     border-radius: 10px;
     padding: 8px 10px;
+    cursor: pointer;
   }
+  .result-row:hover { border-color: var(--tmdb-accent); }
 
   .poster {
     width: 42px;
@@ -389,7 +397,8 @@ const STYLES = `
   .result-title { font-weight: 600; font-size: 14px; }
   .result-meta { color: var(--tmdb-text-muted); font-size: 12px; margin-top: 2px; }
 
-  button.pill {
+  button.pill,
+  a.pill {
     background: var(--tmdb-accent-soft);
     color: var(--tmdb-accent);
     border: 1px solid transparent;
@@ -399,8 +408,11 @@ const STYLES = `
     font-weight: 600;
     cursor: pointer;
     white-space: nowrap;
+    text-decoration: none;
   }
-  button.pill:hover { border-color: var(--tmdb-accent); }
+  button.pill:hover,
+  a.pill:hover { border-color: var(--tmdb-accent); }
+  .button-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
   button.pill:disabled { opacity: 0.5; cursor: default; }
   button.pill.danger { background: transparent; color: var(--tmdb-text-muted); }
   button.pill.danger:hover { color: #e88b8b; border-color: #e88b8b; }
@@ -545,6 +557,11 @@ class HaMoviesDbCard extends HTMLElement {
     this._nowPlayingRegion = "";
     this._nowPlayingLoading = false;
     this._nowPlayingLoadedAt = 0;
+    this._preview = null;
+    this._trailers = {};
+    this._trailerLoading = new Set();
+    this._listScroll = 0;
+    this._scrollOverride = null;
     this._selectedMovieId = null;
     this._detail = null;
     this._settings = { region: "", providers: [] };
@@ -816,7 +833,9 @@ class HaMoviesDbCard extends HTMLElement {
     // Scroll-Position merken: .body wird unten komplett neu aufgebaut, ein
     // frisches Element startet sonst immer bei scrollTop 0.
     const oldBody = root.querySelector(".body");
-    const savedScrollTop = oldBody ? oldBody.scrollTop : 0;
+    const savedScrollTop =
+      this._scrollOverride !== null ? this._scrollOverride : oldBody ? oldBody.scrollTop : 0;
+    this._scrollOverride = null;
 
     // Den neuen Kartenzustand komplett losgelöst vom Dokument aufbauen (kein
     // einziges Element hängt währenddessen im Shadow-DOM), damit am Ende nur
@@ -835,6 +854,8 @@ class HaMoviesDbCard extends HTMLElement {
 
     if (this._selectedMovieId) {
       body.appendChild(this._renderDetail());
+    } else if (this._preview) {
+      body.appendChild(this._renderPreview());
     } else if (this._activeTab === "watchlist") {
       body.appendChild(this._renderWatchlist());
     } else if (this._activeTab === "archive") {
@@ -894,7 +915,7 @@ class HaMoviesDbCard extends HTMLElement {
     header.appendChild(titleRow);
     wrap.appendChild(header);
 
-    if (!this._selectedMovieId) {
+    if (!this._selectedMovieId && !this._preview) {
       const activeCount = this._tracked.filter((m) => !m.archived).length;
       const archivedCount = this._tracked.filter((m) => m.archived).length;
 
@@ -1093,6 +1114,7 @@ class HaMoviesDbCard extends HTMLElement {
     const list = this._el("div", "result-list");
     for (const r of items) {
       const row2 = this._el("div", "result-row");
+      row2.addEventListener("click", () => this._openPreview(r, source));
       const img = document.createElement("img");
       img.className = "poster";
       img.loading = "lazy";
@@ -1103,28 +1125,122 @@ class HaMoviesDbCard extends HTMLElement {
       const t = this._el("div", "result-title");
       t.textContent = r.title;
       const m = this._el("div", "result-meta");
-      m.textContent =
-        source === "nowplaying" && r.release_date
-          ? this._fmtDate(r.release_date)
-          : [r.release_year].filter(Boolean).join(" · ");
+      m.textContent = this._resultMeta(r, source);
       info.appendChild(t);
       info.appendChild(m);
       row2.appendChild(info);
 
-      const btn = document.createElement("button");
-      btn.className = "pill";
-      if (trackedIds.has(r.movie_id)) {
-        btn.textContent = this._t("added");
-        btn.disabled = true;
-      } else {
-        btn.textContent = this._t("add");
-        btn.addEventListener("click", () => this._addMovie(r.movie_id, source));
-      }
-      row2.appendChild(btn);
+      row2.appendChild(this._renderAddButton(r, source, trackedIds.has(r.movie_id)));
 
       list.appendChild(row2);
     }
     return list;
+  }
+
+  _resultMeta(r, source) {
+    return source === "nowplaying" && r.release_date
+      ? this._fmtDate(r.release_date)
+      : [r.release_year].filter(Boolean).join(" · ");
+  }
+
+  _renderAddButton(r, source, isTracked) {
+    const btn = document.createElement("button");
+    btn.className = "pill";
+    if (isTracked) {
+      btn.textContent = this._t("added");
+      btn.disabled = true;
+    } else {
+      btn.textContent = this._t("add");
+      btn.addEventListener("click", (e) => {
+        // Der Klick gehört dem Button, nicht der Zeile (sonst öffnet sich die Vorschau).
+        e.stopPropagation();
+        this._addMovie(r.movie_id, source);
+      });
+    }
+    return btn;
+  }
+
+  _openPreview(item, source) {
+    const body = this.shadowRoot.querySelector(".body");
+    this._listScroll = body ? body.scrollTop : 0;
+    this._scrollOverride = 0;
+    this._preview = { item, source };
+    this._render();
+    this._loadTrailer(item.movie_id);
+  }
+
+  _closePreview() {
+    this._preview = null;
+    this._scrollOverride = this._listScroll;
+    this._render();
+  }
+
+  async _loadTrailer(movieId) {
+    if (movieId in this._trailers || this._trailerLoading.has(movieId)) return;
+    this._trailerLoading.add(movieId);
+    this._render();
+    try {
+      const res = await this._hass.callWS({ type: `${DOMAIN}/get_trailer`, movie_id: movieId });
+      this._trailers[movieId] = res.trailer || null;
+    } catch (err) {
+      // Der Trailer ist eine Zusatzinfo: bei einem Fehler wird einfach kein
+      // Link gezeigt (und beim nächsten Öffnen erneut versucht).
+    }
+    this._trailerLoading.delete(movieId);
+    this._render();
+  }
+
+  _renderPreview() {
+    const { item, source } = this._preview;
+    const wrap = this._el("div");
+    const back = this._el("div", "back-link");
+    back.textContent = this._t("back");
+    back.addEventListener("click", () => this._closePreview());
+    wrap.appendChild(back);
+
+    const header = this._el("div", "detail-header");
+    const img = document.createElement("img");
+    img.className = "poster";
+    if (item.image) img.src = item.image;
+    header.appendChild(img);
+
+    const meta = this._el("div", "meta");
+    const h2 = this._el("h2");
+    h2.textContent = item.title;
+    meta.appendChild(h2);
+    const metaLine = this._el("div", "result-meta");
+    metaLine.textContent = this._resultMeta(item, source);
+    meta.appendChild(metaLine);
+
+    const btnRow = this._el("div", "button-row");
+    const isTracked = this._tracked.some((m) => m.movie_id === item.movie_id);
+    btnRow.appendChild(this._renderAddButton(item, source, isTracked));
+
+    const trailer = this._trailers[item.movie_id];
+    if (trailer) {
+      const link = document.createElement("a");
+      link.className = "pill";
+      link.href = trailer.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = this._t("trailer_link");
+      btnRow.appendChild(link);
+    }
+    meta.appendChild(btnRow);
+
+    if (this._trailerLoading.has(item.movie_id)) {
+      const loading = this._el("div", "result-meta");
+      loading.textContent = this._t("loading_trailer");
+      meta.appendChild(loading);
+    }
+
+    const overview = this._el("div", "overview");
+    overview.textContent = item.overview || this._t("no_overview");
+    meta.appendChild(overview);
+
+    header.appendChild(meta);
+    wrap.appendChild(header);
+    return wrap;
   }
 
   _renderDetail() {

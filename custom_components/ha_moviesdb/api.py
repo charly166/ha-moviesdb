@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
+from datetime import date, timedelta
 from typing import Any
 
 import async_timeout
@@ -19,6 +21,7 @@ from aiohttp import ClientSession, ContentTypeError
 
 from .const import (
     FALLBACK_REGIONS,
+    NOW_PLAYING_MAX_AGE_DAYS,
     NOW_PLAYING_MAX_PAGES,
     TMDB_BASE_URL,
     TMDB_IMAGE_BASE,
@@ -70,6 +73,33 @@ def _map_movie_item(item: dict[str, Any]) -> dict[str, Any] | None:
         "release_year": release_date[:4],
         "release_date": release_date,
     }
+
+
+_ARABIC_SCRIPT = re.compile("[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]")
+_YOUTUBE_KEY = re.compile(r"^[\w-]{6,20}$")
+
+
+def _pick_trailer(videos: list[dict[str, Any]], language: str) -> dict[str, str] | None:
+    """Wählt aus den TMDB-Videos den besten YouTube-Trailer (Sprache, offiziell)."""
+    candidates = [
+        video
+        for video in videos
+        if video.get("site") == "YouTube"
+        and video.get("type") in ("Trailer", "Teaser")
+        and _YOUTUBE_KEY.match(video.get("key") or "")
+    ]
+    if not candidates:
+        return None
+    best = min(
+        candidates,
+        key=lambda video: (
+            video["type"] != "Trailer",
+            video.get("iso_639_1") != language,
+            video.get("iso_639_1") != "en",
+            not video.get("official"),
+        ),
+    )
+    return {"url": f"https://www.youtube.com/watch?v={best['key']}", "name": best.get("name", "")}
 
 
 # Home-Assistant-Sprache -> TMDB-Sprachcode (TMDB erwartet z.B. "de-DE").
@@ -146,11 +176,17 @@ class TMDBClient:
         mapped = (_map_movie_item(item) for item in data.get("results", []))
         return [movie for movie in mapped if movie]
 
-    async def async_get_now_playing(self, region: str) -> list[dict[str, Any]]:
+    async def async_get_now_playing(
+        self, region: str, today: date | None = None
+    ) -> list[dict[str, Any]]:
         """Holt die Filme, die aktuell in der Region im Kino laufen.
 
-        Nutzt /movie/now_playing (TMDB-Reihenfolge bleibt erhalten). Die
-        weiteren Seiten werden parallel geholt, doppelte Einträge entfernt.
+        Nutzt /movie/now_playing, dessen weitere Seiten parallel geholt werden.
+        TMDB zählt dort auch Wiederaufführungen und Sondervorstellungen alter
+        Filme mit; sie werden über das ursprüngliche Erscheinungsdatum
+        herausgefiltert (nur Filme der letzten NOW_PLAYING_MAX_AGE_DAYS Tage
+        oder kommende). Filme mit arabischem Titel werden ausgeblendet, sofern
+        die Abfragesprache nicht Arabisch ist. Neueste Filme stehen zuerst.
         """
         first = await self._request("/movie/now_playing", params={"region": region, "page": 1})
         pages = [first]
@@ -165,15 +201,31 @@ class TMDBClient:
                 )
             )
 
+        cutoff = ((today or date.today()) - timedelta(days=NOW_PLAYING_MAX_AGE_DAYS)).isoformat()
+        hide_arabic = not self._language.lower().startswith("ar")
         results: list[dict[str, Any]] = []
         seen: set[str] = set()
         for page in pages:
             for item in page.get("results", []):
                 movie = _map_movie_item(item)
-                if movie and movie["movie_id"] not in seen:
-                    seen.add(movie["movie_id"])
-                    results.append(movie)
+                if not movie or movie["movie_id"] in seen:
+                    continue
+                seen.add(movie["movie_id"])
+                if not movie["release_date"] or movie["release_date"] < cutoff:
+                    continue
+                if hide_arabic and _ARABIC_SCRIPT.search(movie["title"]):
+                    continue
+                results.append(movie)
+        results.sort(key=lambda movie: movie["release_date"], reverse=True)
         return results
+
+    async def async_get_trailer(self, movie_id: str) -> dict[str, str] | None:
+        """Liefert den besten YouTube-Trailer eines Films (oder None, falls keiner existiert)."""
+        language = self._language.split("-")[0].lower()
+        data = await self._request(
+            f"/movie/{movie_id}/videos", params={"include_video_language": f"{language},en"}
+        )
+        return _pick_trailer(data.get("results", []), language)
 
     async def async_get_movie(self, movie_id: str) -> dict[str, Any]:
         """Holt Filminfos (Titel, Poster, Beschreibung, Laufzeit, Jahr)."""
