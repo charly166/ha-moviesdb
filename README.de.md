@@ -36,6 +36,11 @@ Architektur, aber für Filme statt Serien.
 
 - Suche auf themoviedb.org und Hinzufügen von Filmen zur Watchlist
 - Tabs "Watchlist" und "Archiv" mit Poster-Raster
+- **Tab "Im Kino"**: zeigt die Filme, die aktuell in der konfigurierten Region
+  im Kino laufen (aus TMDBs `now_playing`-Liste, 6 Stunden zwischengespeichert)
+  – jeder Film lässt sich mit einem Klick zur Watchlist hinzufügen.
+  Spielzeiten einzelner Kinos gibt es nicht, dafür existiert keine kostenlose
+  API
 - Film-Detailansicht: Titel, Erscheinungsjahr, Laufzeit, Beschreibung
 - **Als gesehen markieren** – verschiebt den Film ins "Archiv"; jederzeit
   rückgängig zu machen

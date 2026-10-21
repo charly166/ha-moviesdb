@@ -32,7 +32,13 @@ const TRANSLATIONS = {
     tab_watchlist: "Watchlist",
     tab_archive: "Archiv",
     tab_search: "Film hinzufügen",
-    empty_watchlist: "Noch keine Filme in der Watchlist. Wechsle oben zu „Film hinzufügen“, um loszulegen.",
+    tab_nowplaying: "Im Kino",
+    nowplaying_hint: "Aktuell im Kino in {region} · Datenquelle: themoviedb.org (kostenlose API)",
+    nowplaying_hint_generic: "Aktuell im Kino · Datenquelle: themoviedb.org (kostenlose API)",
+    loading_nowplaying: "Lade Kinofilme …",
+    empty_nowplaying: "Aktuell wurden keine Kinofilme gefunden.",
+    err_nowplaying: "Kinofilme konnten nicht geladen werden.",
+    empty_watchlist: "Noch keine Filme in der Watchlist. Wechsle oben zu „Film hinzufügen“ oder „Im Kino“, um loszulegen.",
     empty_archive: "Noch keine archivierten Filme. Markiere einen Film in der Detailansicht als gesehen, um ihn ins Archiv zu verschieben.",
     available: "Verfügbar: {list}",
     search_placeholder: "Filmtitel eingeben …",
@@ -80,7 +86,13 @@ const TRANSLATIONS = {
     tab_watchlist: "Watchlist",
     tab_archive: "Archive",
     tab_search: "Add movie",
-    empty_watchlist: "No movies on your watchlist yet. Switch to “Add movie” above to get started.",
+    tab_nowplaying: "In theaters",
+    nowplaying_hint: "Currently in theaters in {region} · Data source: themoviedb.org (free API)",
+    nowplaying_hint_generic: "Currently in theaters · Data source: themoviedb.org (free API)",
+    loading_nowplaying: "Loading movies in theaters …",
+    empty_nowplaying: "No movies in theaters found right now.",
+    err_nowplaying: "Could not load the movies in theaters.",
+    empty_watchlist: "No movies on your watchlist yet. Switch to “Add movie” or “In theaters” above to get started.",
     empty_archive: "No archived movies yet. Mark a movie as watched in its detail view to move it to the archive.",
     available: "Available: {list}",
     search_placeholder: "Enter movie title …",
@@ -255,9 +267,13 @@ const STYLES = `
     gap: 4px;
     padding: 0 20px;
     background: var(--tmdb-surface);
+    overflow-x: auto;
+    scrollbar-width: none;
   }
 
   .tab {
+    flex: none;
+    white-space: nowrap;
     padding: 10px 4px;
     margin-right: 20px;
     font-size: 14px;
@@ -525,6 +541,10 @@ class HaMoviesDbCard extends HTMLElement {
     this._searchQuery = "";
     this._searchResults = null;
     this._searching = false;
+    this._nowPlaying = null;
+    this._nowPlayingRegion = "";
+    this._nowPlayingLoading = false;
+    this._nowPlayingLoadedAt = 0;
     this._selectedMovieId = null;
     this._detail = null;
     this._settings = { region: "", providers: [] };
@@ -619,18 +639,37 @@ class HaMoviesDbCard extends HTMLElement {
     this._render();
   }
 
-  async _addMovie(movieId) {
+  async _loadNowPlaying(force = false) {
+    // Die Kinoliste ändert sich höchstens täglich - nicht bei jedem Tab-Wechsel
+    // neu laden (das Backend cached zusätzlich).
+    const fresh = Date.now() - this._nowPlayingLoadedAt < 30 * 60 * 1000;
+    if (this._nowPlayingLoading || (!force && this._nowPlaying !== null && fresh)) return;
+    this._nowPlayingLoading = true;
+    this._render();
+    try {
+      const res = await this._hass.callWS({ type: `${DOMAIN}/now_playing` });
+      this._nowPlaying = res.results || [];
+      this._nowPlayingRegion = res.region || "";
+      this._nowPlayingLoadedAt = Date.now();
+      this._error = null;
+    } catch (err) {
+      this._error = this._errText(err, "err_nowplaying");
+      this._nowPlaying = this._nowPlaying || [];
+    }
+    this._nowPlayingLoading = false;
+    this._render();
+  }
+
+  async _addMovie(movieId, source = "search") {
     this._error = null;
     try {
-      const item = this._searchResults
-        ? this._searchResults.find((r) => r.movie_id === movieId)
-        : null;
+      const list = source === "nowplaying" ? this._nowPlaying : this._searchResults;
+      const item = list ? list.find((r) => r.movie_id === movieId) : null;
       await this._hass.callWS({ type: `${DOMAIN}/add_movie`, movie_id: movieId });
       await this._loadTracked();
       this._successMessage = this._t("added_toast", {
         title: item ? item.title : this._t("movie_fallback"),
       });
-      if (item) item.tracked = true;
       this._render();
       clearTimeout(this._successTimeout);
       clearTimeout(this._successFadeTimeout);
@@ -640,9 +679,11 @@ class HaMoviesDbCard extends HTMLElement {
       }, 700);
       this._successTimeout = setTimeout(() => {
         this._successMessage = null;
-        clearTimeout(this._searchDebounce);
-        this._searchQuery = "";
-        this._searchResults = null;
+        if (source === "search") {
+          clearTimeout(this._searchDebounce);
+          this._searchQuery = "";
+          this._searchResults = null;
+        }
         this._render();
       }, 1000);
     } catch (err) {
@@ -798,6 +839,8 @@ class HaMoviesDbCard extends HTMLElement {
       body.appendChild(this._renderWatchlist());
     } else if (this._activeTab === "archive") {
       body.appendChild(this._renderArchive());
+    } else if (this._activeTab === "nowplaying") {
+      body.appendChild(this._renderNowPlaying());
     } else {
       body.appendChild(this._renderSearch());
     }
@@ -871,6 +914,16 @@ class HaMoviesDbCard extends HTMLElement {
         this._activeTab = "archive";
         this._render();
       });
+      const tabNowPlaying = this._el(
+        "div",
+        "tab" + (this._activeTab === "nowplaying" ? " active" : "")
+      );
+      tabNowPlaying.textContent = this._t("tab_nowplaying");
+      tabNowPlaying.addEventListener("click", () => {
+        this._activeTab = "nowplaying";
+        this._render();
+        this._loadNowPlaying();
+      });
       const tabSearch = this._el("div", "tab" + (this._activeTab === "search" ? " active" : ""));
       tabSearch.textContent = this._t("tab_search");
       tabSearch.addEventListener("click", () => {
@@ -879,6 +932,7 @@ class HaMoviesDbCard extends HTMLElement {
       });
       tabs.appendChild(tabWatchlist);
       tabs.appendChild(tabArchive);
+      tabs.appendChild(tabNowPlaying);
       tabs.appendChild(tabSearch);
       wrap.appendChild(tabs);
     }
@@ -986,8 +1040,58 @@ class HaMoviesDbCard extends HTMLElement {
       return wrap;
     }
 
+    wrap.appendChild(this._renderResultList(this._searchResults, "search"));
+    return wrap;
+  }
+
+  _renderNowPlaying() {
+    const wrap = this._el("div");
+    const hint = this._el("div", "hint");
+    const region = this._nowPlayingRegion || this._settings.region;
+    hint.textContent = region
+      ? this._t("nowplaying_hint", { region })
+      : this._t("nowplaying_hint_generic");
+    wrap.appendChild(hint);
+
+    if (this._nowPlayingLoading && !(this._nowPlaying && this._nowPlaying.length)) {
+      const loading = this._el("div", "loading");
+      loading.textContent = this._t("loading_nowplaying");
+      wrap.appendChild(loading);
+      return wrap;
+    }
+
+    if (this._nowPlaying === null) {
+      return wrap;
+    }
+
+    if (!this._nowPlaying.length) {
+      const empty = this._el("div", "empty");
+      empty.textContent = this._t("empty_nowplaying");
+      wrap.appendChild(empty);
+      return wrap;
+    }
+
+    wrap.appendChild(this._renderResultList(this._nowPlaying, "nowplaying"));
+    return wrap;
+  }
+
+  _fmtDate(iso) {
+    if (!iso) return "";
+    const date = new Date(`${iso}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return iso;
+    return date.toLocaleDateString(detectLang(this._hass), {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  }
+
+  _renderResultList(items, source) {
+    // "Hinzugefügt" folgt immer dem aktuellen Stand der Watchlist, nicht dem
+    // Zeitpunkt, an dem die (ggf. zwischengespeicherte) Liste geladen wurde.
+    const trackedIds = new Set(this._tracked.map((m) => m.movie_id));
     const list = this._el("div", "result-list");
-    for (const r of this._searchResults) {
+    for (const r of items) {
       const row2 = this._el("div", "result-row");
       const img = document.createElement("img");
       img.className = "poster";
@@ -999,26 +1103,28 @@ class HaMoviesDbCard extends HTMLElement {
       const t = this._el("div", "result-title");
       t.textContent = r.title;
       const m = this._el("div", "result-meta");
-      m.textContent = [r.release_year].filter(Boolean).join(" · ");
+      m.textContent =
+        source === "nowplaying" && r.release_date
+          ? this._fmtDate(r.release_date)
+          : [r.release_year].filter(Boolean).join(" · ");
       info.appendChild(t);
       info.appendChild(m);
       row2.appendChild(info);
 
       const btn = document.createElement("button");
       btn.className = "pill";
-      if (r.tracked) {
+      if (trackedIds.has(r.movie_id)) {
         btn.textContent = this._t("added");
         btn.disabled = true;
       } else {
         btn.textContent = this._t("add");
-        btn.addEventListener("click", () => this._addMovie(r.movie_id));
+        btn.addEventListener("click", () => this._addMovie(r.movie_id, source));
       }
       row2.appendChild(btn);
 
       list.appendChild(row2);
     }
-    wrap.appendChild(list);
-    return wrap;
+    return list;
   }
 
   _renderDetail() {

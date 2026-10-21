@@ -34,6 +34,10 @@ built on the same architecture, but for movies instead of TV shows.
 
 - Search themoviedb.org and add movies to your watchlist
 - "Watchlist" and "Archive" tabs with a poster grid
+- **"In theaters" tab**: lists the movies currently playing in cinemas in your
+  configured region (from TMDB's `now_playing` list, cached for 6 hours) –
+  add any of them to your watchlist with one click. Showtimes of individual
+  cinemas are not available, there is no free API for them
 - Movie detail view: title, release year, runtime, overview
 - **Mark as watched** – moves the movie to the "Archive" tab; can be reversed
   at any time

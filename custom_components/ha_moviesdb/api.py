@@ -10,6 +10,7 @@ https://developer.themoviedb.org/docs/watch-providers-attribution-requirement
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -18,6 +19,7 @@ from aiohttp import ClientSession, ContentTypeError
 
 from .const import (
     FALLBACK_REGIONS,
+    NOW_PLAYING_MAX_PAGES,
     TMDB_BASE_URL,
     TMDB_IMAGE_BASE,
     TMDB_LANGUAGE,
@@ -51,6 +53,22 @@ def _map_provider(item: dict[str, Any]) -> dict[str, Any]:
         "provider_id": item.get("provider_id"),
         "provider_name": item.get("provider_name", ""),
         "logo_path": _image_url(item.get("logo_path"), TMDB_PROVIDER_LOGO_SIZE),
+    }
+
+
+def _map_movie_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    """Vereinfacht einen Eintrag aus Listen-Endpunkten (Suche, Im Kino)."""
+    movie_id = item.get("id")
+    if movie_id is None:
+        return None
+    release_date = item.get("release_date") or ""
+    return {
+        "movie_id": str(movie_id),
+        "title": item.get("title") or item.get("original_title") or "?",
+        "overview": item.get("overview", ""),
+        "image": _image_url(item.get("poster_path"), TMDB_POSTER_SIZE),
+        "release_year": release_date[:4],
+        "release_date": release_date,
     }
 
 
@@ -125,21 +143,36 @@ class TMDBClient:
         data = await self._request(
             "/search/movie", params={"query": query, "include_adult": "false"}
         )
-        results = []
-        for item in data.get("results", []):
-            movie_id = item.get("id")
-            if movie_id is None:
-                continue
-            year = (item.get("release_date") or "")[:4]
-            results.append(
-                {
-                    "movie_id": str(movie_id),
-                    "title": item.get("title") or item.get("original_title") or "?",
-                    "overview": item.get("overview", ""),
-                    "image": _image_url(item.get("poster_path"), TMDB_POSTER_SIZE),
-                    "release_year": year,
-                }
+        mapped = (_map_movie_item(item) for item in data.get("results", []))
+        return [movie for movie in mapped if movie]
+
+    async def async_get_now_playing(self, region: str) -> list[dict[str, Any]]:
+        """Holt die Filme, die aktuell in der Region im Kino laufen.
+
+        Nutzt /movie/now_playing (TMDB-Reihenfolge bleibt erhalten). Die
+        weiteren Seiten werden parallel geholt, doppelte Einträge entfernt.
+        """
+        first = await self._request("/movie/now_playing", params={"region": region, "page": 1})
+        pages = [first]
+        total_pages = min(first.get("total_pages") or 1, NOW_PLAYING_MAX_PAGES)
+        if total_pages > 1:
+            pages.extend(
+                await asyncio.gather(
+                    *(
+                        self._request("/movie/now_playing", params={"region": region, "page": page})
+                        for page in range(2, total_pages + 1)
+                    )
+                )
             )
+
+        results: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for page in pages:
+            for item in page.get("results", []):
+                movie = _map_movie_item(item)
+                if movie and movie["movie_id"] not in seen:
+                    seen.add(movie["movie_id"])
+                    results.append(movie)
         return results
 
     async def async_get_movie(self, movie_id: str) -> dict[str, Any]:
