@@ -38,6 +38,13 @@ const TRANSLATIONS = {
     loading_nowplaying: "Lade Kinofilme …",
     empty_nowplaying: "Aktuell wurden keine Kinofilme gefunden.",
     err_nowplaying: "Kinofilme konnten nicht geladen werden.",
+    mode_nowplaying: "Derzeit",
+    mode_upcoming: "Demnächst",
+    upcoming_hint: "Demnächst im Kino in {region} · Datenquelle: themoviedb.org (kostenlose API)",
+    upcoming_hint_generic: "Demnächst im Kino · Datenquelle: themoviedb.org (kostenlose API)",
+    loading_upcoming: "Lade kommende Kinofilme …",
+    empty_upcoming: "Aktuell wurden keine kommenden Kinofilme gefunden.",
+    err_upcoming: "Kommende Kinofilme konnten nicht geladen werden.",
     trailer_link: "▶ Trailer auf YouTube ansehen",
     loading_trailer: "Suche Trailer …",
     no_overview: "Keine Beschreibung verfügbar.",
@@ -95,6 +102,13 @@ const TRANSLATIONS = {
     loading_nowplaying: "Loading movies in theaters …",
     empty_nowplaying: "No movies in theaters found right now.",
     err_nowplaying: "Could not load the movies in theaters.",
+    mode_nowplaying: "Now playing",
+    mode_upcoming: "Coming soon",
+    upcoming_hint: "Coming soon to theaters in {region} · Data source: themoviedb.org (free API)",
+    upcoming_hint_generic: "Coming soon to theaters · Data source: themoviedb.org (free API)",
+    loading_upcoming: "Loading upcoming movies …",
+    empty_upcoming: "No upcoming movies found right now.",
+    err_upcoming: "Could not load the upcoming movies.",
     trailer_link: "▶ Watch trailer on YouTube",
     loading_trailer: "Looking for a trailer …",
     no_overview: "No description available.",
@@ -413,6 +427,8 @@ const STYLES = `
   button.pill:hover,
   a.pill:hover { border-color: var(--tmdb-accent); }
   .button-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .mode-switch { display: flex; gap: 8px; margin-bottom: 10px; }
+  button.pill.active { background: var(--tmdb-accent); color: var(--tmdb-bg); }
   button.pill:disabled { opacity: 0.5; cursor: default; }
   button.pill.danger { background: transparent; color: var(--tmdb-text-muted); }
   button.pill.danger:hover { color: #e88b8b; border-color: #e88b8b; }
@@ -553,10 +569,11 @@ class HaMoviesDbCard extends HTMLElement {
     this._searchQuery = "";
     this._searchResults = null;
     this._searching = false;
-    this._nowPlaying = null;
-    this._nowPlayingRegion = "";
-    this._nowPlayingLoading = false;
-    this._nowPlayingLoadedAt = 0;
+    this._cinemaMode = "nowplaying";
+    this._cinema = {
+      nowplaying: { items: null, region: "", loading: false, loadedAt: 0 },
+      upcoming: { items: null, region: "", loading: false, loadedAt: 0 },
+    };
     this._preview = null;
     this._trailers = {};
     this._trailerLoading = new Set();
@@ -656,31 +673,33 @@ class HaMoviesDbCard extends HTMLElement {
     this._render();
   }
 
-  async _loadNowPlaying(force = false) {
-    // Die Kinoliste ändert sich höchstens täglich - nicht bei jedem Tab-Wechsel
+  async _loadCinema(source, force = false) {
+    // Die Kinolisten ändern sich höchstens täglich - nicht bei jedem Wechsel
     // neu laden (das Backend cached zusätzlich).
-    const fresh = Date.now() - this._nowPlayingLoadedAt < 30 * 60 * 1000;
-    if (this._nowPlayingLoading || (!force && this._nowPlaying !== null && fresh)) return;
-    this._nowPlayingLoading = true;
+    const state = this._cinema[source];
+    const fresh = Date.now() - state.loadedAt < 30 * 60 * 1000;
+    if (state.loading || (!force && state.items !== null && fresh)) return;
+    state.loading = true;
     this._render();
     try {
-      const res = await this._hass.callWS({ type: `${DOMAIN}/now_playing` });
-      this._nowPlaying = res.results || [];
-      this._nowPlayingRegion = res.region || "";
-      this._nowPlayingLoadedAt = Date.now();
+      const type = source === "upcoming" ? "upcoming" : "now_playing";
+      const res = await this._hass.callWS({ type: `${DOMAIN}/${type}` });
+      state.items = res.results || [];
+      state.region = res.region || "";
+      state.loadedAt = Date.now();
       this._error = null;
     } catch (err) {
-      this._error = this._errText(err, "err_nowplaying");
-      this._nowPlaying = this._nowPlaying || [];
+      this._error = this._errText(err, `err_${source}`);
+      state.items = state.items || [];
     }
-    this._nowPlayingLoading = false;
+    state.loading = false;
     this._render();
   }
 
   async _addMovie(movieId, source = "search") {
     this._error = null;
     try {
-      const list = source === "nowplaying" ? this._nowPlaying : this._searchResults;
+      const list = source === "search" ? this._searchResults : this._cinema[source].items;
       const item = list ? list.find((r) => r.movie_id === movieId) : null;
       await this._hass.callWS({ type: `${DOMAIN}/add_movie`, movie_id: movieId });
       await this._loadTracked();
@@ -861,7 +880,7 @@ class HaMoviesDbCard extends HTMLElement {
     } else if (this._activeTab === "archive") {
       body.appendChild(this._renderArchive());
     } else if (this._activeTab === "nowplaying") {
-      body.appendChild(this._renderNowPlaying());
+      body.appendChild(this._renderCinema());
     } else {
       body.appendChild(this._renderSearch());
     }
@@ -943,7 +962,7 @@ class HaMoviesDbCard extends HTMLElement {
       tabNowPlaying.addEventListener("click", () => {
         this._activeTab = "nowplaying";
         this._render();
-        this._loadNowPlaying();
+        this._loadCinema(this._cinemaMode);
       });
       const tabSearch = this._el("div", "tab" + (this._activeTab === "search" ? " active" : ""));
       tabSearch.textContent = this._t("tab_search");
@@ -1065,34 +1084,53 @@ class HaMoviesDbCard extends HTMLElement {
     return wrap;
   }
 
-  _renderNowPlaying() {
+  _renderCinema() {
     const wrap = this._el("div");
+    const source = this._cinemaMode;
+    const state = this._cinema[source];
+
+    // Umschalter "Derzeit" / "Demnächst" (Standard: Derzeit)
+    const modes = this._el("div", "mode-switch");
+    for (const mode of ["nowplaying", "upcoming"]) {
+      const btn = document.createElement("button");
+      btn.className = "pill" + (mode === source ? " active" : "");
+      btn.textContent = this._t(`mode_${mode}`);
+      btn.addEventListener("click", () => {
+        if (this._cinemaMode === mode) return;
+        this._cinemaMode = mode;
+        this._render();
+        this._loadCinema(mode);
+      });
+      modes.appendChild(btn);
+    }
+    wrap.appendChild(modes);
+
     const hint = this._el("div", "hint");
-    const region = this._nowPlayingRegion || this._settings.region;
+    const region = state.region || this._settings.region;
     hint.textContent = region
-      ? this._t("nowplaying_hint", { region })
-      : this._t("nowplaying_hint_generic");
+      ? this._t(`${source === "upcoming" ? "upcoming" : "nowplaying"}_hint`, { region })
+      : this._t(`${source === "upcoming" ? "upcoming" : "nowplaying"}_hint_generic`);
     wrap.appendChild(hint);
 
-    if (this._nowPlayingLoading && !(this._nowPlaying && this._nowPlaying.length)) {
+    if (state.loading && !(state.items && state.items.length)) {
       const loading = this._el("div", "loading");
-      loading.textContent = this._t("loading_nowplaying");
+      loading.textContent = this._t(`loading_${source}`);
       wrap.appendChild(loading);
       return wrap;
     }
 
-    if (this._nowPlaying === null) {
+    if (state.items === null) {
       return wrap;
     }
 
-    if (!this._nowPlaying.length) {
+    if (!state.items.length) {
       const empty = this._el("div", "empty");
-      empty.textContent = this._t("empty_nowplaying");
+      empty.textContent = this._t(`empty_${source}`);
       wrap.appendChild(empty);
       return wrap;
     }
 
-    wrap.appendChild(this._renderResultList(this._nowPlaying, "nowplaying"));
+    wrap.appendChild(this._renderResultList(state.items, source));
     return wrap;
   }
 
@@ -1138,7 +1176,7 @@ class HaMoviesDbCard extends HTMLElement {
   }
 
   _resultMeta(r, source) {
-    return source === "nowplaying" && r.release_date
+    return (source === "nowplaying" || source === "upcoming") && r.release_date
       ? this._fmtDate(r.release_date)
       : [r.release_year].filter(Boolean).join(" · ");
   }

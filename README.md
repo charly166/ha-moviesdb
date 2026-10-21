@@ -40,8 +40,11 @@ built on the same architecture, but for movies instead of TV shows.
   with titles in Arabic or Asian scripts (TMDB only knows the original title
   then) or with neither poster nor description are hidden. Click a movie to
   see its description and a link to its trailer on YouTube (only if TMDB
-  knows one), and add it to your watchlist with one click. Showtimes of
-  individual cinemas are not available, there is no free API for them
+  knows one), and add it to your watchlist with one click. Two buttons
+  switch between **Now playing** (default) and **Coming soon**; the latter
+  lists upcoming movies sorted by their cinema start in your region.
+  Showtimes of individual cinemas are not available, there is no free API
+  for them
 - Movie detail view: title, release year, runtime, overview
 - **Mark as watched** – moves the movie to the "Archive" tab; can be reversed
   at any time

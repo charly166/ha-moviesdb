@@ -37,7 +37,7 @@ STATIC_BASE_PATH = f"/{DOMAIN}"
 # Lovelace-Ressource wird automatisch auf diese Version aktualisiert (siehe
 # frontend.py) - ein manuelles Nachtragen der URL ist dadurch nicht mehr
 # nötig.
-CARD_VERSION = "4"
+CARD_VERSION = "5"
 
 STORAGE_VERSION = 1
 STORAGE_KEY = f"{DOMAIN}_data"
@@ -53,6 +53,8 @@ UPDATE_INTERVAL_HOURS = 12
 NOW_PLAYING_MAX_PAGES = 10
 NOW_PLAYING_MAX_AGE_DAYS = 120
 NOW_PLAYING_CACHE_SECONDS = 6 * 60 * 60
+# "Demnächst": der Kinostart in der Region wird pro Film einzeln nachgeschlagen.
+UPCOMING_LOOKUP_CONCURRENCY = 8
 TRAILER_CACHE_SECONDS = 24 * 60 * 60
 
 SIGNAL_MOVIE_ADDED = f"{DOMAIN}_movie_added"

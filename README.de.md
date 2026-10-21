@@ -43,8 +43,10 @@ Architektur, aber für Filme statt Serien.
   nur den Originaltitel) oder ohne Poster und Beschreibung werden
   ausgeblendet. Ein Klick auf einen Film zeigt die Beschreibung und einen
   Link zum Trailer auf YouTube (nur, wenn TMDB einen kennt) und lässt ihn
-  mit einem Klick zur Watchlist hinzufügen. Spielzeiten einzelner Kinos gibt
-  es nicht, dafür existiert keine kostenlose API
+  mit einem Klick zur Watchlist hinzufügen. Zwei Buttons wechseln zwischen
+  **Derzeit** (Standard) und **Demnächst**; Letzteres listet kommende Filme
+  nach ihrem Kinostart in deiner Region sortiert. Spielzeiten einzelner
+  Kinos gibt es nicht, dafür existiert keine kostenlose API
 - Film-Detailansicht: Titel, Erscheinungsjahr, Laufzeit, Beschreibung
 - **Als gesehen markieren** – verschiebt den Film ins "Archiv"; jederzeit
   rückgängig zu machen

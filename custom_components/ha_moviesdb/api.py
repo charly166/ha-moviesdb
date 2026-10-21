@@ -28,6 +28,7 @@ from .const import (
     TMDB_LANGUAGE,
     TMDB_POSTER_SIZE,
     TMDB_PROVIDER_LOGO_SIZE,
+    UPCOMING_LOOKUP_CONCURRENCY,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -105,6 +106,19 @@ _NATIVE_SCRIPT_LANGUAGES = frozenset(
     "ar fa ur zh ja ko th hi mr ne bn pa gu ta te kn ml si my km lo".split()
 )
 _YOUTUBE_KEY = re.compile(r"^[\w-]{6,20}$")
+
+
+def _regional_release_date(results: list[dict[str, Any]], region: str, today: date) -> str | None:
+    """Frühester Kinostart (Typ 2 begrenzt, 3 regulär) in der Region ab heute, als ISO-Datum."""
+    start = today.isoformat()
+    dates = [
+        (entry.get("release_date") or "")[:10]
+        for country in results
+        if country.get("iso_3166_1") == region
+        for entry in country.get("release_dates", [])
+        if entry.get("type") in (2, 3) and (entry.get("release_date") or "")[:10] >= start
+    ]
+    return min(dates) if dates else None
 
 
 def _pick_trailer(videos: list[dict[str, Any]], language: str) -> dict[str, str] | None:
@@ -204,36 +218,34 @@ class TMDBClient:
         mapped = (_map_movie_item(item) for item in data.get("results", []))
         return [movie for movie in mapped if movie]
 
-    async def async_get_now_playing(
-        self, region: str, today: date | None = None
+    async def _async_get_cinema_movies(
+        self, path: str, region: str, today: date
     ) -> list[dict[str, Any]]:
-        """Holt die Filme, die aktuell in der Region im Kino laufen.
+        """Holt alle Seiten eines TMDB-Kinolisten-Endpunkts und filtert Unbrauchbares heraus.
 
-        Nutzt /movie/now_playing, dessen weitere Seiten parallel geholt werden.
-        TMDB zählt dort auch Wiederaufführungen und Sondervorstellungen alter
-        Filme mit; sie werden über das ursprüngliche Erscheinungsdatum
-        herausgefiltert (nur Filme der letzten NOW_PLAYING_MAX_AGE_DAYS Tage
-        oder kommende). Filme, deren Titel in arabischer oder asiatischer Schrift
-        steht (TMDB kennt dann nur den Originaltitel), werden ausgeblendet,
-        sofern die Abfragesprache nicht selbst eine solche Schrift nutzt, ebenso
-        Einträge ganz ohne Poster
-        und Beschreibung (meist unfertige TMDB-Datensätze). Neueste Filme stehen
-        zuerst.
+        Weitere Seiten werden parallel geholt. TMDB zählt in diesen Listen auch
+        Wiederaufführungen und Sondervorstellungen alter Filme mit; sie werden
+        über das ursprüngliche Erscheinungsdatum herausgefiltert (nur Filme der
+        letzten NOW_PLAYING_MAX_AGE_DAYS Tage oder kommende). Filme, deren Titel
+        in arabischer oder asiatischer Schrift steht (TMDB kennt dann nur den
+        Originaltitel), werden ausgeblendet, sofern die Abfragesprache nicht
+        selbst eine solche Schrift nutzt, ebenso Einträge ganz ohne Poster und
+        Beschreibung (meist unfertige TMDB-Datensätze).
         """
-        first = await self._request("/movie/now_playing", params={"region": region, "page": 1})
+        first = await self._request(path, params={"region": region, "page": 1})
         pages = [first]
         total_pages = min(first.get("total_pages") or 1, NOW_PLAYING_MAX_PAGES)
         if total_pages > 1:
             pages.extend(
                 await asyncio.gather(
                     *(
-                        self._request("/movie/now_playing", params={"region": region, "page": page})
+                        self._request(path, params={"region": region, "page": page})
                         for page in range(2, total_pages + 1)
                     )
                 )
             )
 
-        cutoff = ((today or date.today()) - timedelta(days=NOW_PLAYING_MAX_AGE_DAYS)).isoformat()
+        cutoff = (today - timedelta(days=NOW_PLAYING_MAX_AGE_DAYS)).isoformat()
         hide_scripts = self._language.split("-")[0].lower() not in _NATIVE_SCRIPT_LANGUAGES
         results: list[dict[str, Any]] = []
         seen: set[str] = set()
@@ -250,8 +262,48 @@ class TMDBClient:
                 if not movie["image"] and not movie["overview"]:
                     continue
                 results.append(movie)
-        results.sort(key=lambda movie: movie["release_date"], reverse=True)
         return results
+
+    async def async_get_now_playing(
+        self, region: str, today: date | None = None
+    ) -> list[dict[str, Any]]:
+        """Filme, die aktuell in der Region im Kino laufen (/movie/now_playing), neueste zuerst."""
+        movies = await self._async_get_cinema_movies(
+            "/movie/now_playing", region, today or date.today()
+        )
+        movies.sort(key=lambda movie: movie["release_date"], reverse=True)
+        return movies
+
+    async def async_get_upcoming(
+        self, region: str, today: date | None = None
+    ) -> list[dict[str, Any]]:
+        """Filme, die demnächst in der Region ins Kino kommen (/movie/upcoming).
+
+        Das Erscheinungsdatum in der Liste ist das weltweit erste, ein Film kann
+        also längst woanders laufen. Deshalb wird pro Film der Kinostart in der
+        Region nachgeschlagen (/release_dates, begrenzt parallel). Schlägt das
+        fehl oder gibt es keinen kommenden Termin, bleibt das ursprüngliche Datum.
+        Der nächste Start steht zuerst.
+        """
+        today = today or date.today()
+        movies = await self._async_get_cinema_movies("/movie/upcoming", region, today)
+        semaphore = asyncio.Semaphore(UPCOMING_LOOKUP_CONCURRENCY)
+
+        async def apply_regional_date(movie: dict[str, Any]) -> None:
+            async with semaphore:
+                try:
+                    data = await self._request(f"/movie/{movie['movie_id']}/release_dates")
+                except TMDBError as err:
+                    _LOGGER.debug("Kinostart für %s nicht abrufbar: %s", movie["movie_id"], err)
+                    return
+            found = _regional_release_date(data.get("results", []), region, today)
+            if found:
+                movie["release_date"] = found
+                movie["release_year"] = found[:4]
+
+        await asyncio.gather(*(apply_regional_date(movie) for movie in movies))
+        movies.sort(key=lambda movie: movie["release_date"])
+        return movies
 
     async def async_get_trailer(self, movie_id: str) -> dict[str, str] | None:
         """Liefert den besten YouTube-Trailer eines Films (oder None, falls keiner existiert)."""

@@ -83,14 +83,18 @@ async def ws_search(hass: HomeAssistant, connection: websocket_api.ActiveConnect
     connection.send_result(msg["id"], {"results": results})
 
 
-@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/now_playing"})
-@websocket_api.async_response
-async def ws_now_playing(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
-    """Liefert die Filme, die aktuell in der konfigurierten Region im Kino laufen.
+async def _send_cinema_list(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict,
+    cache_name: str,
+    fetch: str,
+) -> None:
+    """Beantwortet eine Kinolisten-Anfrage (derzeit/demnächst) für die konfigurierte Region.
 
-    Die Antwort von TMDB ändert sich höchstens täglich und besteht aus
-    mehreren Seitenabrufen, daher wird sie pro Region und Sprache
-    zwischengespeichert.
+    Die Antworten von TMDB ändern sich höchstens täglich und bestehen aus
+    mehreren Abrufen, daher werden sie pro Region und Sprache zwischengespeichert
+    (``fetch`` ist der Name der TMDBClient-Methode).
     """
     entry_data = _get_entry_data(hass)
     if entry_data is None:
@@ -98,14 +102,14 @@ async def ws_now_playing(hass: HomeAssistant, connection: websocket_api.ActiveCo
         return
     client = entry_data["client"]
     region = entry_data["entry"].options.get(CONF_REGION, DEFAULT_REGION)
-    cache = entry_data.setdefault("now_playing_cache", {})
+    cache = entry_data.setdefault(cache_name, {})
     cache_key = (region, client.language)
     cached = cache.get(cache_key)
     if cached is not None and time.monotonic() - cached[0] < NOW_PLAYING_CACHE_SECONDS:
         results = cached[1]
     else:
         try:
-            results = await client.async_get_now_playing(region)
+            results = await getattr(client, fetch)(region)
         except TMDBError as err:
             connection.send_error(msg["id"], "tmdb_error", str(err))
             return
@@ -119,6 +123,20 @@ async def ws_now_playing(hass: HomeAssistant, connection: websocket_api.ActiveCo
             "results": [{**item, "tracked": item["movie_id"] in tracked_ids} for item in results],
         },
     )
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/now_playing"})
+@websocket_api.async_response
+async def ws_now_playing(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Filme, die aktuell in der konfigurierten Region im Kino laufen."""
+    await _send_cinema_list(hass, connection, msg, "now_playing_cache", "async_get_now_playing")
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/upcoming"})
+@websocket_api.async_response
+async def ws_upcoming(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    """Filme, die demnächst in der konfigurierten Region ins Kino kommen."""
+    await _send_cinema_list(hass, connection, msg, "upcoming_cache", "async_get_upcoming")
 
 
 @websocket_api.websocket_command(
@@ -336,6 +354,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
     """Registriert alle WebSocket-Befehle (nur einmal global nötig)."""
     websocket_api.async_register_command(hass, ws_search)
     websocket_api.async_register_command(hass, ws_now_playing)
+    websocket_api.async_register_command(hass, ws_upcoming)
     websocket_api.async_register_command(hass, ws_get_trailer)
     websocket_api.async_register_command(hass, ws_list_tracked)
     websocket_api.async_register_command(hass, ws_get_movie)
