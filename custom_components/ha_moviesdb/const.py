@@ -51,7 +51,7 @@ UPDATE_INTERVAL_HOURS = 12
 # Erscheinungsdatum gefiltert (NOW_PLAYING_MAX_AGE_DAYS). Die Antwort wird
 # zwischengespeichert, damit nicht bei jedem Tab-Wechsel ein neuer Abruf nötig ist.
 NOW_PLAYING_MAX_PAGES = 10
-NOW_PLAYING_MAX_AGE_DAYS = 270
+NOW_PLAYING_MAX_AGE_DAYS = 120
 NOW_PLAYING_CACHE_SECONDS = 6 * 60 * 60
 TRAILER_CACHE_SECONDS = 24 * 60 * 60
 

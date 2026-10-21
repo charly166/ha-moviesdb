@@ -186,7 +186,9 @@ class TMDBClient:
         Filme mit; sie werden über das ursprüngliche Erscheinungsdatum
         herausgefiltert (nur Filme der letzten NOW_PLAYING_MAX_AGE_DAYS Tage
         oder kommende). Filme mit arabischem Titel werden ausgeblendet, sofern
-        die Abfragesprache nicht Arabisch ist. Neueste Filme stehen zuerst.
+        die Abfragesprache nicht Arabisch ist, ebenso Einträge ganz ohne Poster
+        und Beschreibung (meist unfertige TMDB-Datensätze). Neueste Filme stehen
+        zuerst.
         """
         first = await self._request("/movie/now_playing", params={"region": region, "page": 1})
         pages = [first]
@@ -214,6 +216,8 @@ class TMDBClient:
                 if not movie["release_date"] or movie["release_date"] < cutoff:
                     continue
                 if hide_arabic and _ARABIC_SCRIPT.search(movie["title"]):
+                    continue
+                if not movie["image"] and not movie["overview"]:
                     continue
                 results.append(movie)
         results.sort(key=lambda movie: movie["release_date"], reverse=True)
