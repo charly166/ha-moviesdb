@@ -39,11 +39,12 @@ Architektur, aber für Filme statt Serien.
 - **Tab "Im Kino"**: zeigt die Filme, die aktuell in der konfigurierten Region
   im Kino laufen (aus TMDBs `now_playing`-Liste, 6 Stunden zwischengespeichert,
   neueste zuerst). Wiederaufführungen alter Filme (älter als ca. 4 Monate)
-  und Filme mit arabischem Titel oder ohne Poster und Beschreibung werden
+  und Filme mit Titel in arabischer oder asiatischer Schrift (TMDB kennt dann
+  nur den Originaltitel) oder ohne Poster und Beschreibung werden
   ausgeblendet. Ein Klick auf einen Film zeigt die Beschreibung und einen
   Link zum Trailer auf YouTube (nur, wenn TMDB einen kennt) und lässt ihn
-  mit einem Klick zur Watchlist hinzufügen. Spielzeiten einzelner Kinos gibt es nicht, dafür existiert
-  keine kostenlose API
+  mit einem Klick zur Watchlist hinzufügen. Spielzeiten einzelner Kinos gibt
+  es nicht, dafür existiert keine kostenlose API
 - Film-Detailansicht: Titel, Erscheinungsjahr, Laufzeit, Beschreibung
 - **Als gesehen markieren** – verschiebt den Film ins "Archiv"; jederzeit
   rückgängig zu machen

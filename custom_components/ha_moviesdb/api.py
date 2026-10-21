@@ -75,7 +75,35 @@ def _map_movie_item(item: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-_ARABIC_SCRIPT = re.compile("[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]")
+# Unicode-Bereiche der Schriften, in denen TMDB Titel von Filmen ohne deutschen
+# oder englischen Titel liefert (Rückfall auf den Originaltitel). Solche Filme
+# werden in der Kinoliste ausgeblendet.
+_HIDDEN_SCRIPT_RANGES = (
+    (0x0600, 0x06FF),  # Arabisch
+    (0x0750, 0x077F),  # Arabisch, Ergänzung
+    (0x08A0, 0x08FF),  # Arabisch, erweitert
+    (0xFB50, 0xFDFF),  # Arabisch, Präsentationsformen A
+    (0xFE70, 0xFEFF),  # Arabisch, Präsentationsformen B
+    (0x0900, 0x0DFF),  # Indische Schriften (Devanagari bis Singhalesisch)
+    (0x0E00, 0x0EFF),  # Thai, Lao
+    (0x1000, 0x109F),  # Birmanisch
+    (0x1780, 0x17FF),  # Khmer
+    (0x1100, 0x11FF),  # Hangul Jamo
+    (0x3130, 0x318F),  # Hangul-Kompatibilität
+    (0xAC00, 0xD7AF),  # Hangul-Silben
+    (0x3040, 0x30FF),  # Hiragana, Katakana
+    (0x3400, 0x4DBF),  # Han, Erweiterung A
+    (0x4E00, 0x9FFF),  # Han (Chinesisch/Kanji)
+    (0xF900, 0xFAFF),  # Han-Kompatibilität
+    (0x20000, 0x2FA1F),  # Han, Erweiterungen B bis F
+)
+_HIDDEN_SCRIPTS = re.compile(
+    "[" + "".join(f"{chr(start)}-{chr(end)}" for start, end in _HIDDEN_SCRIPT_RANGES) + "]"
+)
+# Wer Home Assistant in einer dieser Sprachen nutzt, bekommt die Titel nicht ausgeblendet.
+_NATIVE_SCRIPT_LANGUAGES = frozenset(
+    "ar fa ur zh ja ko th hi mr ne bn pa gu ta te kn ml si my km lo".split()
+)
 _YOUTUBE_KEY = re.compile(r"^[\w-]{6,20}$")
 
 
@@ -185,8 +213,10 @@ class TMDBClient:
         TMDB zählt dort auch Wiederaufführungen und Sondervorstellungen alter
         Filme mit; sie werden über das ursprüngliche Erscheinungsdatum
         herausgefiltert (nur Filme der letzten NOW_PLAYING_MAX_AGE_DAYS Tage
-        oder kommende). Filme mit arabischem Titel werden ausgeblendet, sofern
-        die Abfragesprache nicht Arabisch ist, ebenso Einträge ganz ohne Poster
+        oder kommende). Filme, deren Titel in arabischer oder asiatischer Schrift
+        steht (TMDB kennt dann nur den Originaltitel), werden ausgeblendet,
+        sofern die Abfragesprache nicht selbst eine solche Schrift nutzt, ebenso
+        Einträge ganz ohne Poster
         und Beschreibung (meist unfertige TMDB-Datensätze). Neueste Filme stehen
         zuerst.
         """
@@ -204,7 +234,7 @@ class TMDBClient:
             )
 
         cutoff = ((today or date.today()) - timedelta(days=NOW_PLAYING_MAX_AGE_DAYS)).isoformat()
-        hide_arabic = not self._language.lower().startswith("ar")
+        hide_scripts = self._language.split("-")[0].lower() not in _NATIVE_SCRIPT_LANGUAGES
         results: list[dict[str, Any]] = []
         seen: set[str] = set()
         for page in pages:
@@ -215,7 +245,7 @@ class TMDBClient:
                 seen.add(movie["movie_id"])
                 if not movie["release_date"] or movie["release_date"] < cutoff:
                     continue
-                if hide_arabic and _ARABIC_SCRIPT.search(movie["title"]):
+                if hide_scripts and _HIDDEN_SCRIPTS.search(movie["title"]):
                     continue
                 if not movie["image"] and not movie["overview"]:
                     continue

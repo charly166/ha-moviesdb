@@ -37,10 +37,11 @@ built on the same architecture, but for movies instead of TV shows.
 - **"In theaters" tab**: lists the movies currently playing in cinemas in your
   configured region (from TMDB's `now_playing` list, cached for 6 hours,
   newest first). Re-releases of old movies (older than ~4 months) and movies
-  with Arabic titles or neither poster nor description are hidden. Click a
-  movie to see its description and a link to its trailer on YouTube (only if
-  TMDB knows one), and add it to your watchlist with one click. Showtimes of individual cinemas are not
-  available, there is no free API for them
+  with titles in Arabic or Asian scripts (TMDB only knows the original title
+  then) or with neither poster nor description are hidden. Click a movie to
+  see its description and a link to its trailer on YouTube (only if TMDB
+  knows one), and add it to your watchlist with one click. Showtimes of
+  individual cinemas are not available, there is no free API for them
 - Movie detail view: title, release year, runtime, overview
 - **Mark as watched** – moves the movie to the "Archive" tab; can be reversed
   at any time
