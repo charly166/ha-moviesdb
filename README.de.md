@@ -35,7 +35,7 @@ Architektur, aber für Filme statt Serien.
 ## Features
 
 - Suche auf themoviedb.org und Hinzufügen von Filmen zur Watchlist
-- Tabs "Watchlist" und "Archiv" mit Poster-Raster
+- Tabs "Watchlist" und "Archiv" mit Poster-Raster und Suchfeld zum Filtern nach Titel
 - **Tab "Im Kino"**: zeigt die Filme, die aktuell in der konfigurierten Region
   im Kino laufen (aus TMDBs `now_playing`-Liste, 6 Stunden zwischengespeichert,
   neueste zuerst). Wiederaufführungen alter Filme (älter als ca. 4 Monate)

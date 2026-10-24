@@ -33,7 +33,7 @@ built on the same architecture, but for movies instead of TV shows.
 ## Features
 
 - Search themoviedb.org and add movies to your watchlist
-- "Watchlist" and "Archive" tabs with a poster grid
+- "Watchlist" and "Archive" tabs with a poster grid and a search field to filter by title
 - **"In theaters" tab**: lists the movies currently playing in cinemas in your
   configured region (from TMDB's `now_playing` list, cached for 6 hours,
   newest first). Re-releases of old movies (older than ~4 months) and movies
