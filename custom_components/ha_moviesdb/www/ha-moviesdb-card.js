@@ -54,6 +54,8 @@ const TRANSLATIONS = {
     search_placeholder: "Filmtitel eingeben …",
     filter_placeholder: "Liste durchsuchen …",
     no_filter_results: "Keine Filme in dieser Liste gefunden.",
+    persons_for: "Vorgemerkt für",
+    err_persons: "Die Personen konnten nicht gespeichert werden.",
     data_source: "Datenquelle: themoviedb.org (kostenlose API)",
     searching: "Suche läuft …",
     no_results: "Keine Treffer.",
@@ -120,6 +122,8 @@ const TRANSLATIONS = {
     search_placeholder: "Enter movie title …",
     filter_placeholder: "Search this list …",
     no_filter_results: "No movies found in this list.",
+    persons_for: "Tagged for",
+    err_persons: "Could not save the people.",
     data_source: "Data source: themoviedb.org (free API)",
     searching: "Searching …",
     no_results: "No results.",
@@ -455,6 +459,37 @@ const STYLES = `
 
   .movie-card .poster { width: 100%; height: 168px; border-radius: 8px; }
 
+  .poster-wrap { position: relative; }
+
+  /* Personen: grau = nicht gewählt, farbig = gewählt */
+  .persons { display: flex; gap: 4px; }
+  .poster-wrap .persons { position: absolute; top: 6px; left: 6px; }
+  .persons-filter { margin-bottom: 10px; align-items: center; gap: 8px; }
+  .persons-label { font-size: 12px; color: var(--tmdb-text-muted); }
+  .person {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    box-sizing: border-box;
+    border: 2px solid #fff;
+    background: var(--tmdb-surface-alt);
+    color: var(--tmdb-text);
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 0;
+    cursor: pointer;
+    filter: grayscale(1);
+    opacity: 0.75;
+  }
+  .person img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .person.on { filter: none; opacity: 1; border-color: var(--tmdb-accent); }
+  .persons-filter .person, .detail-persons .person { width: 34px; height: 34px; }
+  .detail-persons { margin-top: 10px; align-items: center; gap: 8px; }
+
   .movie-card .title { font-size: 13px; font-weight: 600; line-height: 1.25; }
 
   .status-badge {
@@ -588,7 +623,8 @@ class HaMoviesDbCard extends HTMLElement {
     this._scrollOverride = null;
     this._selectedMovieId = null;
     this._detail = null;
-    this._settings = { region: "", providers: [] };
+    this._settings = { region: "", providers: [], persons: [] };
+    this._personFilter = null;
     this._error = null;
     this._successMessage = null;
     this._successTimeout = null;
@@ -663,6 +699,51 @@ class HaMoviesDbCard extends HTMLElement {
       // hier soll die Karte nicht blockieren.
     }
     this._render();
+  }
+
+  // Personen werden nur angezeigt, wenn im Options-Dialog mehr als eine gewählt ist.
+  _persons() {
+    const list = (this._settings && this._settings.persons) || [];
+    return list.length > 1 ? list : [];
+  }
+
+  async _togglePerson(movieId, entityId) {
+    const movie = this._tracked.find((m) => m.movie_id === movieId);
+    const current = (movie && movie.persons) || (this._detail && this._detail.movie_id === movieId ? this._detail.persons : []) || [];
+    const next = current.includes(entityId)
+      ? current.filter((p) => p !== entityId)
+      : [...current, entityId];
+    try {
+      const res = await this._hass.callWS({ type: `${DOMAIN}/set_persons`, movie_id: movieId, persons: next });
+      if (movie) movie.persons = res.persons;
+      if (this._detail && this._detail.movie_id === movieId) this._detail.persons = res.persons;
+      this._error = null;
+    } catch (err) {
+      this._error = this._errText(err, "err_persons");
+    }
+    this._render();
+  }
+
+  _renderPersonAvatars(selected, onToggle, extraClass = "") {
+    const row = this._el("div", `persons ${extraClass}`.trim());
+    for (const p of this._persons()) {
+      const btn = this._el("div", "person" + (selected.includes(p.entity_id) ? " on" : ""));
+      btn.title = p.name;
+      if (p.picture) {
+        const img = document.createElement("img");
+        img.src = p.picture;
+        img.alt = p.name;
+        btn.appendChild(img);
+      } else {
+        btn.textContent = (p.name || "?").trim().charAt(0).toUpperCase();
+      }
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        onToggle(p.entity_id);
+      });
+      row.appendChild(btn);
+    }
+    return row;
   }
 
   async _doSearch(query) {
@@ -1026,9 +1107,24 @@ class HaMoviesDbCard extends HTMLElement {
       wrap.appendChild(row);
     }
 
+    if (this._persons().length) {
+      const filterRow = this._renderPersonAvatars(
+        this._personFilter ? [this._personFilter] : [],
+        (id) => {
+          this._personFilter = this._personFilter === id ? null : id;
+          this._render();
+        },
+        "persons-filter"
+      );
+      wrap.appendChild(filterRow);
+    }
+
     const needle = this._listFilter.trim().toLowerCase();
     if (needle) {
       list = list.filter((m) => (m.title || "").toLowerCase().includes(needle));
+    }
+    if (this._personFilter) {
+      list = list.filter((m) => (m.persons || []).includes(this._personFilter));
     }
     if (!list.length) {
       const empty = this._el("div", "empty");
@@ -1041,11 +1137,18 @@ class HaMoviesDbCard extends HTMLElement {
       const cardEl = this._el("div", "movie-card");
       cardEl.addEventListener("click", () => this._openMovie(m.movie_id));
 
+      const posterWrap = this._el("div", "poster-wrap");
       const img = document.createElement("img");
       img.className = "poster";
       img.loading = "lazy";
       if (m.image) img.src = m.image;
-      cardEl.appendChild(img);
+      posterWrap.appendChild(img);
+      if (this._persons().length) {
+        posterWrap.appendChild(
+          this._renderPersonAvatars(m.persons || [], (id) => this._togglePerson(m.movie_id, id))
+        );
+      }
+      cardEl.appendChild(posterWrap);
 
       const title = this._el("div", "title");
       title.textContent = m.title || m.movie_id;
@@ -1376,6 +1479,17 @@ class HaMoviesDbCard extends HTMLElement {
     btnRow.appendChild(removeBtn);
 
     meta.appendChild(btnRow);
+
+    if (this._persons().length) {
+      const personsRow = this._el("div", "persons detail-persons");
+      const label = this._el("span", "persons-label");
+      label.textContent = this._t("persons_for");
+      personsRow.appendChild(label);
+      personsRow.appendChild(
+        this._renderPersonAvatars(d.persons || [], (id) => this._togglePerson(d.movie_id, id))
+      );
+      meta.appendChild(personsRow);
+    }
 
     if (d.overview) {
       const overview = this._el("div", "overview");

@@ -58,6 +58,12 @@ Architektur, aber für Filme statt Serien.
   (Streaming-Verfügbarkeit ist länderspezifisch) sowie die tatsächlich
   abonnierten Dienste unter Einstellungen → Geräte & Dienste → HA MoviesDB
   → Konfigurieren auswählen
+- **Filme für Personen vormerken**: In den Optionen werden bis zu 4
+  Home-Assistant-Personen gewählt; ihre Avatare erscheinen dann auf jedem
+  Poster (grau = nicht vorgemerkt, farbig = vorgemerkt, Klick schaltet um)
+  und dienen als Filter für die Listen. Nur sichtbar, wenn mehr als eine
+  Person gewählt ist. Wird pro Film gespeichert und als Sensorattribut
+  `persons` bereitgestellt
 - Kartenbreite **und -höhe** sind in modernen "Sections"-Dashboards per
   Ziehen anpassbar und füllen die zugewiesene Rasterzelle exakt aus
 - Eigenes Icon/Logo unter Einstellungen → Geräte & Dienste (Home Assistant
@@ -69,7 +75,7 @@ Architektur, aber für Filme statt Serien.
   eigenen Anbieter, die den Film gerade im Abo haben) für Automationen, z.B.
   "benachrichtige mich, wenn ein Film auf Netflix verfügbar wird"
 - Services für Automationen: `add_movie`, `remove_movie`, `set_watched`,
-  `set_archived`, `refresh`, `refresh_watch_providers`
+  `set_archived`, `set_persons`, `refresh`, `refresh_watch_providers`
 - Alle Daten (Watchlist, Sehstatus, Archiv) werden lokal in Home Assistant
   gespeichert (`.storage/ha_moviesdb_data`) – kein Cloud-Konto nötig außer
   dem kostenlosen TMDB-API-Key
@@ -170,6 +176,12 @@ lässt sich einstellen:
   live von TMDB geladenen Anbieterliste für deine gewählte Region. Diese
   werden in der Film-Detailansicht hervorgehoben und speisen das
   `available_on`-Sensorattribut.
+- **Personen**: bis zu 4 Home-Assistant-Personen, für die Filme vorgemerkt
+  werden können (z.B. zwei Personen mit einer gemeinsamen Watchlist). Sobald
+  mehr als eine Person gewählt ist, erscheinen ihre Avatare auf den Postern
+  und in der Detailansicht; ein Klick auf den Avatar merkt den Film vor oder
+  hebt die Vormerkung auf, über die Avatar-Leiste über der Liste werden nur
+  die Filme einer Person angezeigt.
 
 Ein Regionswechsel wirkt sich vollständig erst beim nächsten Öffnen dieses
 Dialogs aus (die während des aktuellen Formulars angezeigte Anbieterliste

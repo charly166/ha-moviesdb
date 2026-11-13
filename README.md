@@ -55,6 +55,11 @@ built on the same architecture, but for movies instead of TV shows.
   (streaming availability is region-specific) and the services you actually
   subscribe to under Settings → Devices & Services → HA MoviesDB →
   Configure
+- **Tag movies for people**: choose up to 4 Home Assistant persons in the
+  options; their avatars then appear on every poster (grey = not tagged,
+  colored = tagged, click to toggle) and can be used to filter the lists.
+  Shown only when more than one person is selected. Stored per movie and
+  exposed as the `persons` sensor attribute
 - Card width **and height** are resizable by dragging in modern "Sections"
   dashboards, filling exactly the assigned grid cell
 - Own icon/logo under Settings → Devices & Services (Home Assistant 2026.3+)
@@ -64,7 +69,7 @@ built on the same architecture, but for movies instead of TV shows.
   providers currently streaming it) for use in automations, e.g. "notify me
   when a movie becomes available on Netflix"
 - Services for automations: `add_movie`, `remove_movie`, `set_watched`,
-  `set_archived`, `refresh`, `refresh_watch_providers`
+  `set_archived`, `set_persons`, `refresh`, `refresh_watch_providers`
 - All data (watchlist, watched status, archive) is stored locally in Home
   Assistant (`.storage/ha_moviesdb_data`) – no cloud account needed beyond
   the free TMDB API key
@@ -159,6 +164,11 @@ MoviesDB" → enter your API key.
   (Netflix, Disney+, Prime Video, ...), picked from TMDB's live, up-to-date
   provider list for your chosen region. These are highlighted in the movie
   detail view and drive the `available_on` sensor attribute.
+- **People**: up to 4 Home Assistant persons that movies can be tagged for
+  (e.g. two people sharing one watchlist). With more than one person
+  selected, their avatars appear on the posters and in the detail view;
+  click an avatar to tag or untag a movie, and use the avatar row above the
+  list to show only one person's movies.
 
 Changing the region takes full effect the next time you reopen this dialog
 (the provider list shown while you're still on the form reflects the region
