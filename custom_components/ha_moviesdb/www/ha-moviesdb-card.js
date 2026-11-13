@@ -518,6 +518,7 @@ const STYLES = `
   /* 1 Spalte: Listenansicht, Poster links, Text rechts */
   .grid.single .movie-card { flex-direction: row; gap: 12px; }
   .grid.single .poster-wrap { width: 110px; flex-shrink: 0; }
+  .grid.single .poster { cursor: zoom-in; }
   .movie-overview {
     font-size: 12px;
     color: var(--tmdb-text-muted);
@@ -825,9 +826,10 @@ class HaMoviesDbCard extends HTMLElement {
     return box;
   }
 
-  _setPosterOverlay(open) {
-    this._posterOverlay = open;
-    if (open) {
+  // `image`: URL des Posters, das vergrößert werden soll - false schließt das Overlay.
+  _setPosterOverlay(image) {
+    this._posterOverlay = image;
+    if (image) {
       this._onKeydown = (e) => {
         if (e.key === "Escape") this._setPosterOverlay(false);
       };
@@ -1112,19 +1114,11 @@ class HaMoviesDbCard extends HTMLElement {
     }
     card.appendChild(body);
     card.appendChild(this._renderTmdbAttribution());
-    if (this._posterOverlay && !this._selectedMovieId) {
-      // Detailansicht wurde verlassen - Overlay und Tastatur-Listener aufräumen
-      this._posterOverlay = false;
-      if (this._onKeydown) {
-        document.removeEventListener("keydown", this._onKeydown);
-        this._onKeydown = null;
-      }
-    }
-    if (this._posterOverlay && this._selectedMovieId && this._detail && this._detail.image) {
+    if (this._posterOverlay) {
       const overlay = this._el("div", "poster-overlay");
       const big = document.createElement("img");
       // TMDB liefert das Bild auch in höherer Auflösung
-      big.src = this._detail.image.replace("/w342/", "/w780/");
+      big.src = this._posterOverlay.replace("/w342/", "/w780/");
       overlay.appendChild(big);
       overlay.addEventListener("click", () => this._setPosterOverlay(false));
       card.appendChild(overlay);
@@ -1312,6 +1306,14 @@ class HaMoviesDbCard extends HTMLElement {
       img.loading = "lazy";
       if (m.image) img.src = m.image;
       posterWrap.appendChild(img);
+      if (columns === "1" && m.image) {
+        // Listenansicht: Klick auf das Poster vergrößert es, der Rest der Kachel öffnet die Details
+        img.title = this._t("poster_enlarge");
+        img.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this._setPosterOverlay(m.image);
+        });
+      }
       if (this._persons().length) {
         posterWrap.appendChild(
           this._renderPersonAvatars(m.persons || [], (id) => this._togglePerson(m.movie_id, id))
@@ -1621,7 +1623,7 @@ class HaMoviesDbCard extends HTMLElement {
     if (d.image) {
       img.src = d.image;
       img.title = this._t("poster_enlarge");
-      img.addEventListener("click", () => this._setPosterOverlay(true));
+      img.addEventListener("click", () => this._setPosterOverlay(d.image));
     }
     header.appendChild(img);
 
