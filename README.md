@@ -60,6 +60,9 @@ built on the same architecture, but for movies instead of TV shows.
   colored = tagged, click to toggle) and can be used to filter the lists.
   Shown only when more than one person is selected. Stored per movie and
   exposed as the `persons` sensor attribute
+- **Poster size**: card option `poster_size` (`small`, `medium`, `large`) for
+  the thumbnails in the lists, also selectable in the card editor. The detail
+  view shows a larger poster; click it to open it full size
 - Card width **and height** are resizable by dragging in modern "Sections"
   dashboards, filling exactly the assigned grid cell
 - Own icon/logo under Settings → Devices & Services (Home Assistant 2026.3+)

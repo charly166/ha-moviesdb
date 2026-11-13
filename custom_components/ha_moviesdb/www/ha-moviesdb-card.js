@@ -22,6 +22,13 @@
 
 const DOMAIN = "ha_moviesdb";
 
+// Kachelgröße der Poster in Watchlist/Archiv (Kartenoption `poster_size`).
+const POSTER_SIZES = {
+  small: { min: 120, height: 168 },
+  medium: { min: 160, height: 224 },
+  large: { min: 200, height: 280 },
+};
+
 // --- Mehrsprachigkeit -------------------------------------------------------
 // Die Kartensprache folgt der Sprache des angemeldeten Home-Assistant-Benutzers
 // (hass.locale.language). Deutsch und Englisch sind fest eingebaut. Für weitere
@@ -55,6 +62,11 @@ const TRANSLATIONS = {
     filter_placeholder: "Liste durchsuchen …",
     no_filter_results: "Keine Filme in dieser Liste gefunden.",
     persons_for: "Vorgemerkt für",
+    poster_size_label: "Postergröße",
+    poster_size_small: "Klein",
+    poster_size_medium: "Mittel",
+    poster_size_large: "Groß",
+    poster_enlarge: "Poster vergrößern",
     err_persons: "Die Personen konnten nicht gespeichert werden.",
     data_source: "Datenquelle: themoviedb.org (kostenlose API)",
     searching: "Suche läuft …",
@@ -93,7 +105,7 @@ const TRANSLATIONS = {
     err_not_configured: "Die Integration ist nicht eingerichtet.",
     err_not_found: "Der Film wird nicht verfolgt.",
     err_tmdb: "Fehler bei der Kommunikation mit themoviedb.org. Details stehen im Home-Assistant-Log.",
-    editor_text: "Diese Karte hat keine Konfigurationsoptionen. Breite und Höhe lassen sich über den Reiter „Layout“ einstellen. Region und eigene Streamingdienste werden unter Einstellungen → Geräte & Dienste → HA MoviesDB → Konfigurieren eingestellt.",
+    editor_text: "Breite und Höhe lassen sich über den Reiter „Layout“ einstellen. Region und eigene Streamingdienste werden unter Einstellungen → Geräte & Dienste → HA MoviesDB → Konfigurieren eingestellt.",
     card_description: "Film-Watchlist mit themoviedb.org als Datenquelle – inkl. Streaming-Verfügbarkeit.",
   },
   en: {
@@ -123,6 +135,11 @@ const TRANSLATIONS = {
     filter_placeholder: "Search this list …",
     no_filter_results: "No movies found in this list.",
     persons_for: "Tagged for",
+    poster_size_label: "Poster size",
+    poster_size_small: "Small",
+    poster_size_medium: "Medium",
+    poster_size_large: "Large",
+    poster_enlarge: "Enlarge poster",
     err_persons: "Could not save the people.",
     data_source: "Data source: themoviedb.org (free API)",
     searching: "Searching …",
@@ -161,7 +178,7 @@ const TRANSLATIONS = {
     err_not_configured: "The integration is not set up.",
     err_not_found: "This movie is not on your watchlist.",
     err_tmdb: "Error communicating with themoviedb.org. See the Home Assistant log for details.",
-    editor_text: "This card has no configuration options. Width and height can be set on the “Layout” tab. Region and your own streaming services are set under Settings → Devices & Services → HA MoviesDB → Configure.",
+    editor_text: "Width and height can be set on the “Layout” tab. Region and your own streaming services are set under Settings → Devices & Services → HA MoviesDB → Configure.",
     card_description: "Movie watchlist using themoviedb.org as data source – including streaming availability.",
   },
 };
@@ -445,7 +462,7 @@ const STYLES = `
 
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(var(--poster-min, 120px), 1fr));
     gap: 14px;
     padding-right: 4px;
   }
@@ -457,7 +474,7 @@ const STYLES = `
     gap: 6px;
   }
 
-  .movie-card .poster { width: 100%; height: 168px; border-radius: 8px; }
+  .movie-card .poster { width: 100%; height: var(--poster-height, 168px); border-radius: 8px; }
 
   .poster-wrap { position: relative; }
 
@@ -518,7 +535,24 @@ const STYLES = `
 
   /* Detailansicht */
   .detail-header { display: flex; gap: 14px; margin-bottom: 14px; }
-  .detail-header .poster { width: 70px; height: 100px; }
+  .detail-header .poster { width: 120px; height: 180px; border-radius: 8px; cursor: zoom-in; }
+  .poster-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    background: rgba(0, 0, 0, 0.88);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    cursor: zoom-out;
+  }
+  .poster-overlay img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 8px;
+  }
   .detail-header .meta { flex: 1; min-width: 0; }
   .detail-header h2 {
     font-family: ${HEADLINE_FONT};
@@ -625,6 +659,7 @@ class HaMoviesDbCard extends HTMLElement {
     this._detail = null;
     this._settings = { region: "", providers: [], persons: [] };
     this._personFilter = null;
+    this._posterOverlay = false;
     this._error = null;
     this._successMessage = null;
     this._successTimeout = null;
@@ -697,6 +732,20 @@ class HaMoviesDbCard extends HTMLElement {
     } catch (err) {
       // Einstellungen sind nur für die Hervorhebung wichtig - ein Fehler
       // hier soll die Karte nicht blockieren.
+    }
+    this._render();
+  }
+
+  _setPosterOverlay(open) {
+    this._posterOverlay = open;
+    if (open) {
+      this._onKeydown = (e) => {
+        if (e.key === "Escape") this._setPosterOverlay(false);
+      };
+      document.addEventListener("keydown", this._onKeydown);
+    } else if (this._onKeydown) {
+      document.removeEventListener("keydown", this._onKeydown);
+      this._onKeydown = null;
     }
     this._render();
   }
@@ -974,6 +1023,23 @@ class HaMoviesDbCard extends HTMLElement {
     }
     card.appendChild(body);
     card.appendChild(this._renderTmdbAttribution());
+    if (this._posterOverlay && !this._selectedMovieId) {
+      // Detailansicht wurde verlassen - Overlay und Tastatur-Listener aufräumen
+      this._posterOverlay = false;
+      if (this._onKeydown) {
+        document.removeEventListener("keydown", this._onKeydown);
+        this._onKeydown = null;
+      }
+    }
+    if (this._posterOverlay && this._selectedMovieId && this._detail && this._detail.image) {
+      const overlay = this._el("div", "poster-overlay");
+      const big = document.createElement("img");
+      // TMDB liefert das Bild auch in höherer Auflösung
+      big.src = this._detail.image.replace("/w342/", "/w780/");
+      overlay.appendChild(big);
+      overlay.addEventListener("click", () => this._setPosterOverlay(false));
+      card.appendChild(overlay);
+    }
 
     if (this._successMessage) {
       const toast = this._el("div", "toast");
@@ -1133,6 +1199,9 @@ class HaMoviesDbCard extends HTMLElement {
       return wrap;
     }
     const grid = this._el("div", "grid");
+    const size = POSTER_SIZES[this._config.poster_size] || POSTER_SIZES.small;
+    grid.style.setProperty("--poster-min", `${size.min}px`);
+    grid.style.setProperty("--poster-height", `${size.height}px`);
     for (const m of list) {
       const cardEl = this._el("div", "movie-card");
       cardEl.addEventListener("click", () => this._openMovie(m.movie_id));
@@ -1441,7 +1510,11 @@ class HaMoviesDbCard extends HTMLElement {
     const header = this._el("div", "detail-header");
     const img = document.createElement("img");
     img.className = "poster";
-    if (d.image) img.src = d.image;
+    if (d.image) {
+      img.src = d.image;
+      img.title = this._t("poster_enlarge");
+      img.addEventListener("click", () => this._setPosterOverlay(true));
+    }
     header.appendChild(img);
 
     const meta = this._el("div", "meta");
@@ -1637,10 +1710,9 @@ class HaMoviesDbCard extends HTMLElement {
   }
 }
 
-// Minimaler Konfigurations-Editor: Diese Karte hat keine einstellbaren
-// Optionen (nur `type: custom:ha-moviesdb-card`), daher genügt ein kurzer
-// Hinweistext. Wichtig ist vor allem, DASS die Klasse existiert - siehe
-// Kommentar bei getConfigElement() oben.
+// Minimaler Konfigurations-Editor: einzige Option ist `poster_size`. Wichtig
+// ist vor allem, DASS die Klasse existiert - siehe Kommentar bei
+// getConfigElement() oben.
 class HaMoviesDbCardEditor extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
@@ -1654,8 +1726,16 @@ class HaMoviesDbCardEditor extends HTMLElement {
   }
 
   _updateText() {
-    const p = this.shadowRoot && this.shadowRoot.querySelector("p");
-    if (p) p.textContent = translate(detectLang(this._hass), "editor_text");
+    const root = this.shadowRoot;
+    if (!root) return;
+    const lang = detectLang(this._hass);
+    root.querySelector("p").textContent = translate(lang, "editor_text");
+    root.querySelector("label").firstChild.textContent = translate(lang, "poster_size_label") + " ";
+    const select = root.querySelector("select");
+    for (const option of select.options) {
+      option.textContent = translate(lang, `poster_size_${option.value}`);
+    }
+    select.value = POSTER_SIZES[this._config.poster_size] ? this._config.poster_size : "small";
   }
 
   _render() {
@@ -1666,16 +1746,32 @@ class HaMoviesDbCardEditor extends HTMLElement {
     const root = this.attachShadow({ mode: "open" });
     root.innerHTML = `
       <style>
-        p {
+        p, label {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
           font-size: 14px;
           color: var(--secondary-text-color, #6b7280);
-          padding: 16px 4px;
+          padding: 8px 4px;
           margin: 0;
+          display: block;
         }
+        select { font-size: 14px; margin-left: 6px; }
       </style>
       <p></p>
+      <label>x <select>
+        <option value="small"></option>
+        <option value="medium"></option>
+        <option value="large"></option>
+      </select></label>
     `;
+    root.querySelector("select").addEventListener("change", (e) => {
+      const config = { ...this._config };
+      if (e.target.value === "small") delete config.poster_size;
+      else config.poster_size = e.target.value;
+      this._config = config;
+      this.dispatchEvent(
+        new CustomEvent("config-changed", { detail: { config }, bubbles: true, composed: true })
+      );
+    });
     this._updateText();
   }
 }

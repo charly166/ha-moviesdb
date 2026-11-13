@@ -64,6 +64,10 @@ Architektur, aber für Filme statt Serien.
   und dienen als Filter für die Listen. Nur sichtbar, wenn mehr als eine
   Person gewählt ist. Wird pro Film gespeichert und als Sensorattribut
   `persons` bereitgestellt
+- **Postergröße**: Kartenoption `poster_size` (`small`, `medium`, `large`) für
+  die Vorschaubilder in den Listen, auch im Karteneditor wählbar. Die
+  Detailansicht zeigt ein größeres Poster; ein Klick darauf öffnet es in voller
+  Größe
 - Kartenbreite **und -höhe** sind in modernen "Sections"-Dashboards per
   Ziehen anpassbar und füllen die zugewiesene Rasterzelle exakt aus
 - Eigenes Icon/Logo unter Einstellungen → Geräte & Dienste (Home Assistant
