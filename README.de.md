@@ -64,6 +64,9 @@ Architektur, aber für Filme statt Serien.
   und dienen als Filter für die Listen. Nur sichtbar, wenn mehr als eine
   Person gewählt ist. Wird pro Film gespeichert und als Sensorattribut
   `persons` bereitgestellt
+- **Spalten**: kleiner Umschalter (Auto, 1, 2, 3) über den Listen; die Wahl
+  wird pro Browser gemerkt. 1 Spalte ist eine Listenansicht mit Poster und
+  Beschreibung. Die Kartenoption `columns` legt die Voreinstellung fest
 - **Postergröße**: Kartenoption `poster_size` (`small`, `medium`, `large`) für
   die Vorschaubilder in den Listen, auch im Karteneditor wählbar. Die
   Detailansicht zeigt ein größeres Poster; ein Klick darauf öffnet es in voller

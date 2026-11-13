@@ -60,6 +60,9 @@ built on the same architecture, but for movies instead of TV shows.
   colored = tagged, click to toggle) and can be used to filter the lists.
   Shown only when more than one person is selected. Stored per movie and
   exposed as the `persons` sensor attribute
+- **Columns**: small switch (Auto, 1, 2, 3) above the lists; the choice is
+  remembered per browser. 1 column is a list view with poster and description.
+  The card option `columns` sets the default
 - **Poster size**: card option `poster_size` (`small`, `medium`, `large`) for
   the thumbnails in the lists, also selectable in the card editor. The detail
   view shows a larger poster; click it to open it full size

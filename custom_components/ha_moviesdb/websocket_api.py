@@ -201,6 +201,7 @@ async def ws_list_tracked(hass: HomeAssistant, connection: websocket_api.ActiveC
             {
                 "movie_id": movie_id,
                 "title": movie.get("title"),
+                "overview": movie.get("overview"),
                 "image": movie.get("image"),
                 "release_year": movie.get("release_year"),
                 "runtime": movie.get("runtime"),

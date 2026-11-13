@@ -22,6 +22,11 @@
 
 const DOMAIN = "ha_moviesdb";
 
+// Spaltenzahl der Listen: "auto" richtet sich nach poster_size, 1 ist eine
+// Listenansicht mit Beschreibung. Die Wahl am Gerät wird im Browser gemerkt.
+const COLUMN_CHOICES = ["auto", "1", "2", "3"];
+const COLUMNS_STORAGE_KEY = "ha_moviesdb_columns";
+
 // Kachelgröße der Poster in Watchlist/Archiv (Kartenoption `poster_size`).
 const POSTER_SIZES = {
   small: { min: 120, height: 168 },
@@ -67,6 +72,8 @@ const TRANSLATIONS = {
     poster_size_medium: "Mittel",
     poster_size_large: "Groß",
     poster_enlarge: "Poster vergrößern",
+    columns_label: "Spalten",
+    columns_auto: "Auto",
     err_persons: "Die Personen konnten nicht gespeichert werden.",
     data_source: "Datenquelle: themoviedb.org (kostenlose API)",
     searching: "Suche läuft …",
@@ -140,6 +147,8 @@ const TRANSLATIONS = {
     poster_size_medium: "Medium",
     poster_size_large: "Large",
     poster_enlarge: "Enlarge poster",
+    columns_label: "Columns",
+    columns_auto: "Auto",
     err_persons: "Could not save the people.",
     data_source: "Data source: themoviedb.org (free API)",
     searching: "Searching …",
@@ -477,6 +486,46 @@ const STYLES = `
   .movie-card .poster { width: 100%; height: var(--poster-height, 168px); border-radius: 8px; }
 
   .poster-wrap { position: relative; }
+  .movie-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+  .list-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .list-toolbar .persons-filter { margin-bottom: 0; }
+  .columns-switch { display: flex; gap: 4px; margin-left: auto; }
+  .columns-switch button {
+    background: var(--tmdb-surface-alt);
+    color: var(--tmdb-text-muted);
+    border: 1px solid var(--tmdb-border);
+    border-radius: 6px;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .columns-switch button:hover { border-color: var(--tmdb-accent); }
+  .columns-switch button.active { background: var(--tmdb-accent); color: var(--tmdb-bg); border-color: var(--tmdb-accent); }
+
+  /* feste Spaltenzahl: Poster im Seitenverhältnis 2:3 statt fester Höhe */
+  .grid.fixed .movie-card .poster { height: auto; aspect-ratio: 2 / 3; }
+  /* 1 Spalte: Listenansicht, Poster links, Text rechts */
+  .grid.single .movie-card { flex-direction: row; gap: 12px; }
+  .grid.single .poster-wrap { width: 110px; flex-shrink: 0; }
+  .movie-overview {
+    font-size: 12px;
+    color: var(--tmdb-text-muted);
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 
   /* Personen: grau = nicht gewählt, farbig = gewählt */
   .persons { display: flex; gap: 4px; }
@@ -660,6 +709,7 @@ class HaMoviesDbCard extends HTMLElement {
     this._settings = { region: "", providers: [], persons: [] };
     this._personFilter = null;
     this._posterOverlay = false;
+    this._columns = null;
     this._error = null;
     this._successMessage = null;
     this._successTimeout = null;
@@ -734,6 +784,45 @@ class HaMoviesDbCard extends HTMLElement {
       // hier soll die Karte nicht blockieren.
     }
     this._render();
+  }
+
+  // Spaltenwahl: Auswahl am Gerät (localStorage) vor der Kartenoption `columns`.
+  _getColumns() {
+    if (this._columns === null) {
+      let stored = null;
+      try {
+        stored = window.localStorage.getItem(COLUMNS_STORAGE_KEY);
+      } catch {
+        // localStorage nicht verfügbar - egal
+      }
+      const configured = this._config.columns === undefined ? "auto" : String(this._config.columns);
+      this._columns = COLUMN_CHOICES.includes(stored) ? stored : COLUMN_CHOICES.includes(configured) ? configured : "auto";
+    }
+    return this._columns;
+  }
+
+  _setColumns(value) {
+    this._columns = value;
+    try {
+      window.localStorage.setItem(COLUMNS_STORAGE_KEY, value);
+    } catch {
+      // nicht schlimm, die Wahl gilt dann nur bis zum Neuladen
+    }
+    this._render();
+  }
+
+  _renderColumnsSwitch() {
+    const box = this._el("div", "columns-switch");
+    box.title = this._t("columns_label");
+    for (const choice of COLUMN_CHOICES) {
+      const btn = document.createElement("button");
+      btn.textContent = choice === "auto" ? this._t("columns_auto") : choice;
+      btn.title = `${this._t("columns_label")}: ${btn.textContent}`;
+      if (this._getColumns() === choice) btn.className = "active";
+      btn.addEventListener("click", () => this._setColumns(choice));
+      box.appendChild(btn);
+    }
+    return box;
   }
 
   _setPosterOverlay(open) {
@@ -1173,17 +1262,21 @@ class HaMoviesDbCard extends HTMLElement {
       wrap.appendChild(row);
     }
 
+    const toolbar = this._el("div", "list-toolbar");
     if (this._persons().length) {
-      const filterRow = this._renderPersonAvatars(
-        this._personFilter ? [this._personFilter] : [],
-        (id) => {
-          this._personFilter = this._personFilter === id ? null : id;
-          this._render();
-        },
-        "persons-filter"
+      toolbar.appendChild(
+        this._renderPersonAvatars(
+          this._personFilter ? [this._personFilter] : [],
+          (id) => {
+            this._personFilter = this._personFilter === id ? null : id;
+            this._render();
+          },
+          "persons-filter"
+        )
       );
-      wrap.appendChild(filterRow);
     }
+    toolbar.appendChild(this._renderColumnsSwitch());
+    wrap.appendChild(toolbar);
 
     const needle = this._listFilter.trim().toLowerCase();
     if (needle) {
@@ -1199,9 +1292,16 @@ class HaMoviesDbCard extends HTMLElement {
       return wrap;
     }
     const grid = this._el("div", "grid");
-    const size = POSTER_SIZES[this._config.poster_size] || POSTER_SIZES.small;
-    grid.style.setProperty("--poster-min", `${size.min}px`);
-    grid.style.setProperty("--poster-height", `${size.height}px`);
+    const columns = this._getColumns();
+    if (columns === "auto") {
+      const size = POSTER_SIZES[this._config.poster_size] || POSTER_SIZES.small;
+      grid.style.setProperty("--poster-min", `${size.min}px`);
+      grid.style.setProperty("--poster-height", `${size.height}px`);
+    } else {
+      grid.classList.add("fixed");
+      if (columns === "1") grid.classList.add("single");
+      grid.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+    }
     for (const m of list) {
       const cardEl = this._el("div", "movie-card");
       cardEl.addEventListener("click", () => this._openMovie(m.movie_id));
@@ -1219,21 +1319,29 @@ class HaMoviesDbCard extends HTMLElement {
       }
       cardEl.appendChild(posterWrap);
 
+      const info = this._el("div", "movie-info");
       const title = this._el("div", "title");
       title.textContent = m.title || m.movie_id;
-      cardEl.appendChild(title);
+      info.appendChild(title);
 
       if (m.release_year) {
         const badge = this._el("div", "status-badge");
         badge.textContent = m.release_year;
-        cardEl.appendChild(badge);
+        info.appendChild(badge);
       }
 
       if (m.available_on && m.available_on.length) {
         const avail = this._el("div", "available-badge");
         avail.textContent = this._t("available", { list: m.available_on.join(", ") });
-        cardEl.appendChild(avail);
+        info.appendChild(avail);
       }
+
+      if (columns === "1" && m.overview) {
+        const overview = this._el("div", "movie-overview");
+        overview.textContent = m.overview;
+        info.appendChild(overview);
+      }
+      cardEl.appendChild(info);
 
       grid.appendChild(cardEl);
     }
@@ -1710,7 +1818,7 @@ class HaMoviesDbCard extends HTMLElement {
   }
 }
 
-// Minimaler Konfigurations-Editor: einzige Option ist `poster_size`. Wichtig
+// Minimaler Konfigurations-Editor: Optionen sind `columns` und `poster_size`. Wichtig
 // ist vor allem, DASS die Klasse existiert - siehe Kommentar bei
 // getConfigElement() oben.
 class HaMoviesDbCardEditor extends HTMLElement {
@@ -1730,12 +1838,20 @@ class HaMoviesDbCardEditor extends HTMLElement {
     if (!root) return;
     const lang = detectLang(this._hass);
     root.querySelector("p").textContent = translate(lang, "editor_text");
-    root.querySelector("label").firstChild.textContent = translate(lang, "poster_size_label") + " ";
-    const select = root.querySelector("select");
-    for (const option of select.options) {
-      option.textContent = translate(lang, `poster_size_${option.value}`);
+    for (const label of root.querySelectorAll("label")) {
+      const key = label.dataset.key;
+      label.firstChild.textContent = translate(lang, `${key}_label`) + " ";
+      const select = label.querySelector("select");
+      for (const option of select.options) {
+        option.textContent =
+          key === "columns" && option.value !== "auto"
+            ? option.value
+            : translate(lang, `${key}_${option.value}`);
+      }
+      const choices = key === "columns" ? COLUMN_CHOICES : Object.keys(POSTER_SIZES);
+      const current = this._config[key] === undefined ? "" : String(this._config[key]);
+      select.value = choices.includes(current) ? current : choices[0];
     }
-    select.value = POSTER_SIZES[this._config.poster_size] ? this._config.poster_size : "small";
   }
 
   _render() {
@@ -1757,21 +1873,26 @@ class HaMoviesDbCardEditor extends HTMLElement {
         select { font-size: 14px; margin-left: 6px; }
       </style>
       <p></p>
-      <label>x <select>
-        <option value="small"></option>
-        <option value="medium"></option>
-        <option value="large"></option>
+      <label data-key="columns">x <select>
+        ${COLUMN_CHOICES.map((c) => `<option value="${c}"></option>`).join("")}
+      </select></label>
+      <label data-key="poster_size">x <select>
+        ${Object.keys(POSTER_SIZES).map((c) => `<option value="${c}"></option>`).join("")}
       </select></label>
     `;
-    root.querySelector("select").addEventListener("change", (e) => {
-      const config = { ...this._config };
-      if (e.target.value === "small") delete config.poster_size;
-      else config.poster_size = e.target.value;
-      this._config = config;
-      this.dispatchEvent(
-        new CustomEvent("config-changed", { detail: { config }, bubbles: true, composed: true })
-      );
-    });
+    for (const label of root.querySelectorAll("label")) {
+      const key = label.dataset.key;
+      label.querySelector("select").addEventListener("change", (e) => {
+        const config = { ...this._config };
+        const isDefault = e.target.value === (key === "columns" ? "auto" : "small");
+        if (isDefault) delete config[key];
+        else config[key] = key === "columns" ? Number(e.target.value) : e.target.value;
+        this._config = config;
+        this.dispatchEvent(
+          new CustomEvent("config-changed", { detail: { config }, bubbles: true, composed: true })
+        );
+      });
+    }
     this._updateText();
   }
 }
